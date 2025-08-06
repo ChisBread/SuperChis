@@ -241,7 +241,7 @@ begin
             -- icntr 7,8 have async reset, handled in another process
             
             -- mc_A14: T FF
-            mc_A14 <= ((not GP(19) and not mc_A5 and not mc_B5 and not mc_B6 and mc_B9)
+            mc_A14 <= ((not GP_19 and not mc_A5 and not mc_B5 and not mc_B6 and mc_B9)
                 or (mc_A5 and not mc_A14 and not mc_B5 and not mc_B6 and not mc_B9)
                 or (mc_A5 and mc_A14 and mc_B5 and not mc_B6 and not mc_B9)
                 ) xor (not mc_A5 and not mc_A14 and not mc_B5 and mc_B9) xor mc_A14;
@@ -347,7 +347,7 @@ begin
     DDR_A(11) <= mc_B3;
 
     -- 组合逻辑，用于检测所有地址和控制信号是否处于特定状态 (可能用于模式解锁)
-    mc_B8 <= GP_16 and GP_17 and GP(0) and GP(1) and GP(2) and GP(3) and GP(5) and GP(10) and GP(11) and GP_18 and GP_22 and GP_21 and GP_20 and GP(19) and GP(15) and GP(13) and GP(12) and GP_23;
+    mc_B8 <= GP_16 and GP_17 and GP(0) and GP(1) and GP(2) and GP(3) and GP(5) and GP(10) and GP(11) and GP_18 and GP_22 and GP_21 and GP_20 and GP_19 and GP(15) and GP(13) and GP(12) and GP_23;
 
     -- 寄存器加载过程，在GP_NWR上升沿触发
     process(GP_NWR)
@@ -451,29 +451,29 @@ begin
             -- mc_E0: D FF
             mc_E0 <= (not GP_22 or mc_F5 or mc_H5 or mc_H14 or not mc_H15)
                 and (GP_22 or mc_F11 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(2) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or mc_E0 or not mc_H5)
+                and (GP(2) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or mc_E0 or not mc_H5)
                 and (mc_E0 or mc_H5 or mc_H15)
                 and (mc_E0 or mc_H5 or not mc_H14);
             -- mc_E2: D FF
             mc_E2 <= (not GP_22 or mc_E0 or mc_H5 or mc_H14 or not mc_H15)
                 and (GP_22 or mc_E15 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(3) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or mc_E2 or not mc_H5)
+                and (GP(3) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or mc_E2 or not mc_H5)
                 and (mc_E2 or mc_H5 or mc_H15)
                 and (mc_E2 or mc_H5 or not mc_H14);
             -- mc_E13: D FF
             mc_E13 <= (mc_E13 or mc_H5 or not mc_H14)
                 and (GP_22 or mc_F7 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(0) or GP(19) or not mc_H5 or mc_H10)
+                and (GP(0) or GP_19 or not mc_H5 or mc_H10)
                 and (not GP_22 or SD_CMD or mc_H5 or mc_H14 or not mc_H15)
-                and (not GP(19) or mc_E13 or not mc_H5)
+                and (not GP_19 or mc_E13 or not mc_H5)
                 and (mc_E13 or mc_H5 or mc_H15);
             -- mc_E15: T FF
-            mc_E15 <= ((not GP(19) and not mc_E15 and mc_H5)
+            mc_E15 <= ((not GP_19 and not mc_E15 and mc_H5)
                 or (not GP_22 and not mc_E15 and mc_F1 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and mc_E15 and not mc_F1 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(19) and not GP(15) and mc_H5 and not mc_H10) xor mc_E15;
+                ) xor (not GP_19 and not GP(15) and mc_H5 and not mc_H10) xor mc_E15;
         end if;
     end process;
     FLASH_A(9) <= mc_E7;
@@ -505,47 +505,47 @@ begin
     begin
         if rising_edge(GP_NCS) then
             -- mc_F0: T FF
-            mc_F0 <= ((not GP(19) and not mc_F0 and mc_H5)
+            mc_F0 <= ((not GP_19 and not mc_F0 and mc_H5)
                 or (not GP_22 and SD_DAT(2) and not mc_F0 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and not SD_DAT(2) and mc_F0 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(10) and not GP(19) and mc_H5 and not mc_H10) xor mc_F0;
+                ) xor (not GP(10) and not GP_19 and mc_H5 and not mc_H10) xor mc_F0;
             -- mc_F1: T FF
-            mc_F1 <= ((not GP(19) and not mc_F1 and mc_H5)
+            mc_F1 <= ((not GP_19 and not mc_F1 and mc_H5)
                 or (not GP_22 and SD_DAT(3) and not mc_F1 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and not SD_DAT(3) and mc_F1 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(11) and not GP(19) and mc_H5 and not mc_H10) xor mc_F1;
+                ) xor (not GP(11) and not GP_19 and mc_H5 and not mc_H10) xor mc_F1;
             -- mc_F5: D FF
             mc_F5 <= (not GP_22 or mc_E13 or mc_H5 or mc_H14 or not mc_H15)
                 and (GP_22 or mc_F9 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(1) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or mc_F5 or not mc_H5)
+                and (GP(1) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or mc_F5 or not mc_H5)
                 and (mc_F5 or mc_H5 or mc_H15)
                 and (mc_F5 or mc_H5 or not mc_H14);
             -- mc_F7: T FF
-            mc_F7 <= ((not GP(19) and not mc_F7 and mc_H5)
+            mc_F7 <= ((not GP_19 and not mc_F7 and mc_H5)
                 or (not GP_22 and not mc_F7 and mc_F14 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and mc_F7 and not mc_F14 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(19) and not GP(12) and mc_H5 and not mc_H10) xor mc_F7;
+                ) xor (not GP_19 and not GP(12) and mc_H5 and not mc_H10) xor mc_F7;
             -- mc_F9: T FF
-            mc_F9 <= ((not GP(19) and not mc_F9 and mc_H5)
+            mc_F9 <= ((not GP_19 and not mc_F9 and mc_H5)
                 or (not GP_22 and not mc_F9 and mc_F15 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and mc_F9 and not mc_F15 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(19) and not GP(13) and mc_H5 and not mc_H10) xor mc_F9;
+                ) xor (not GP_19 and not GP(13) and mc_H5 and not mc_H10) xor mc_F9;
             -- mc_F11: T FF
-            mc_F11 <= ((not GP(19) and not mc_F11 and mc_H5)
+            mc_F11 <= ((not GP_19 and not mc_F11 and mc_H5)
                 or (not GP_22 and mc_F0 and not mc_F11 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and not mc_F0 and mc_F11 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(19) and not GP(14) and mc_H5 and not mc_H10) xor mc_F11;
+                ) xor (not GP_19 and not GP(14) and mc_H5 and not mc_H10) xor mc_F11;
             -- mc_F14: T FF
-            mc_F14 <= ((not GP(19) and not mc_F14 and mc_H5)
+            mc_F14 <= ((not GP_19 and not mc_F14 and mc_H5)
                 or (not GP_22 and SD_DAT(0) and not mc_F14 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and not SD_DAT(0) and mc_F14 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(8) and not GP(19) and mc_H5 and not mc_H10) xor mc_F14;
+                ) xor (not GP(8) and not GP_19 and mc_H5 and not mc_H10) xor mc_F14;
             -- mc_F15: T FF
-            mc_F15 <= ((not GP(19) and not mc_F15 and mc_H5)
+            mc_F15 <= ((not GP_19 and not mc_F15 and mc_H5)
                 or (not GP_22 and SD_DAT(1) and not mc_F15 and not mc_H5 and not mc_H14 and mc_H15)
                 or (not GP_22 and not SD_DAT(1) and mc_F15 and not mc_H5 and not mc_H14 and mc_H15)
-                ) xor (not GP(9) and not GP(19) and mc_H5 and not mc_H10) xor mc_F15;
+                ) xor (not GP(9) and not GP_19 and mc_H5 and not mc_H10) xor mc_F15;
         end if;
     end process;
     mc_F2 <= (not GP_22 and mc_E13) or (GP_22 and mc_E2);
@@ -633,8 +633,8 @@ begin
             -- mc_H3: D FF
             mc_H3 <= (not GP_22 or mc_E2 or mc_H5 or mc_H14 or not mc_H15)
                 and (GP_22 or mc_E13 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(4) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or mc_H3 or not mc_H5)
+                and (GP(4) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or mc_H3 or not mc_H5)
                 and (mc_H3 or mc_H5 or mc_H15)
                 and (mc_H3 or mc_H5 or not mc_H14);
             -- mc_H4: T FF
@@ -645,22 +645,22 @@ begin
             -- mc_H7: D FF
             mc_H7 <= (GP_22 or mc_E0 or mc_H5 or mc_H14 or not mc_H15)
                 and (not GP_22 or mc_H5 or mc_H13 or mc_H14 or not mc_H15)
-                and (GP(6) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or not mc_H5 or mc_H7)
+                and (GP(6) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or not mc_H5 or mc_H7)
                 and (mc_H5 or mc_H7 or mc_H15)
                 and (mc_H5 or mc_H7 or not mc_H14);
             -- mc_H9: D FF
             mc_H9 <= (GP_22 or mc_E2 or mc_H5 or mc_H14 or not mc_H15)
                 and (not GP_22 or mc_H5 or mc_H7 or mc_H14 or not mc_H15)
-                and (GP(7) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or not mc_H5 or mc_H9)
+                and (GP(7) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or not mc_H5 or mc_H9)
                 and (mc_H5 or mc_H9 or mc_H15)
                 and (mc_H5 or mc_H9 or not mc_H14);
             -- mc_H13: D FF
             mc_H13 <= (GP_22 or mc_F5 or mc_H5 or mc_H14 or not mc_H15)
                 and (not GP_22 or mc_H3 or mc_H5 or mc_H14 or not mc_H15)
-                and (GP(5) or GP(19) or not mc_H5 or mc_H10)
-                and (not GP(19) or not mc_H5 or mc_H13)
+                and (GP(5) or GP_19 or not mc_H5 or mc_H10)
+                and (not GP_19 or not mc_H5 or mc_H13)
                 and (mc_H5 or mc_H13 or mc_H15)
                 and (mc_H5 or mc_H13 or not mc_H14);
         end if;
