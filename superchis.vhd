@@ -101,7 +101,6 @@ architecture behavioral of superchis is
     
     -- Access Control
     signal current_mode       : access_mode_t := MODE_FLASH;
-    signal flash_chip_enable  : std_logic := '1';
     signal sd_output_enable   : std_logic := '1';
     
     -- Bus Control
@@ -167,37 +166,42 @@ begin
                                GP_20 = '1' and GP_21 = '1' and GP_22 = '1' and GP_23 = '1') else '0';
     
     -- Magic value detection: 0xA55A
-    magic_value_match <= '1' when (GP = x"A55A") else '0';
+    magic_value_match <= '1' when (GP(15 downto 0) = x"A55A") else '0';
     
-    -- Magic sequence state machine
+    -- Magic sequence state machine to match driver behavior (2x magic, 2x config)
     process(GP_NWR)
     begin
         if rising_edge(GP_NWR) then
             if magic_address = '1' then
-                if magic_value_match = '1' then
-                    -- Received magic value, increment counter
-                    magic_write_count <= magic_write_count + 1;
-                    if magic_write_count = "01" then
-                        -- Second magic write, enable config loading for next write
-                        config_load_enable <= '1';
-                    end if;
-                elsif config_load_enable = '1' then
-                    -- This is the mode configuration write
-                    -- TODO: Check
-                    config_sd_enable   <= GP(1);    -- Bit1: SD card interface
-                    config_map_reg     <= GP(0);    -- Bit0: SDRAM vs Flash
-                    config_write_enable <= GP(2);   -- Bit2: Write access/SRAM bank
-                    config_load_enable <= '0';      -- Reset config loading
-                    magic_write_count <= "00";      -- Reset counter
-                else
-                    -- Non-magic value, reset sequence
-                    magic_write_count <= "00";
-                    config_load_enable <= '0';
-                end if;
+                case magic_write_count is
+                    when "00" => -- Expect first magic value
+                        if magic_value_match = '1' then
+                            magic_write_count <= "01";
+                        end if;
+                    when "01" => -- Expect second magic value
+                        if magic_value_match = '1' then
+                            magic_write_count <= "10";
+                        else
+                            magic_write_count <= "00"; -- Reset on wrong value
+                        end if;
+                    when "10" => -- Expect first config value
+                        -- Load config registers on the first config write
+                        config_sd_enable    <= GP(1);
+                        config_map_reg      <= GP(0);
+                        config_write_enable <= GP(2);
+                        -- Load flash banking bits, faithfully matching original.vhd logic
+                        config_bank_select(0) <= GP(4) and not GP(8) and GP(12); -- mc_C10
+                        config_bank_select(1) <= GP(7) and not GP(10) and GP(11);-- mc_G14
+                        config_bank_select(2) <= GP(7) and GP(9) and not GP(15); -- mc_D9
+                        magic_write_count   <= "11";
+                    when "11" => -- Expect second config value, then reset
+                        magic_write_count <= "00";
+                    when others =>
+                        magic_write_count <= "00";
+                end case;
             else
-                -- Not magic address, reset everything
+                -- If write is not to magic address, reset the sequence
                 magic_write_count <= "00";
-                config_load_enable <= '0';
             end if;
         end if;
     end process;
@@ -235,17 +239,17 @@ begin
     
     process(internal_address, config_bank_select, current_mode, config_write_enable)
     begin
+        -- Default to a direct mapping of the internal address
         flash_address <= std_logic_vector(internal_address);
         
-        -- Bank selection for extended addressing
+        -- Bank selection for extended addressing, faithfully matching original.vhd
         if current_mode = MODE_FLASH then
-            -- Flash banking logic
-            if config_bank_select(2) = '1' then
-                flash_address(15) <= '1';
-            end if;
-            if config_bank_select(1) = '1' then
-                flash_address(14) <= '1';
-            end if;
+            -- The original design uses OR logic to apply banking bits to the address.
+            -- This is a direct reconstruction of the logic found in GLB C and D.
+            flash_address(15) <= internal_address(15) or config_bank_select(2) or config_bank_select(1) or config_bank_select(0); -- mc_D0
+            flash_address(14) <= internal_address(14) or config_bank_select(1); -- mc_C6
+            flash_address(11) <= internal_address(11) or config_bank_select(2); -- mc_D2
+            flash_address(7)  <= internal_address(7)  or config_bank_select(0); -- mc_D1 (original was iaddr(4), typo in original)
             
             -- Flash address bit 9 gating (equivalent to mc_E7 in original)
             -- Only allow A9 to be set when write is enabled
@@ -345,10 +349,11 @@ begin
                     ddr_cas_reg <= '0';  -- CAS active for read
                     
                 when DDR_WRITE =>
-                    if write_enable_sync = '1' then
-                        ddr_cas_reg <= '0';  -- CAS active
-                        ddr_we_reg  <= '0';  -- WE active for write (only when write enabled)
-                    end if;
+                    -- The decision to write is made when entering this state.
+                    -- The previous condition on write_enable_sync was incorrect as the
+                    -- signal is '0' during a write, preventing the command from issuing.
+                    ddr_cas_reg <= '0';  -- CAS active
+                    ddr_we_reg  <= '0';  -- WE active for write
                     
                 when DDR_PRECHARGE =>
                     ddr_ras_reg <= '0';  -- RAS active
@@ -367,21 +372,56 @@ begin
     -- DDR Address Multiplexing
     process(ddr_state, internal_address, GP_16, GP_17, GP_18, GP_19, GP_20, GP_21, GP_22, GP_23)
     begin
-        -- TODO: Check
+        -- This logic is a faithful reconstruction of the original hardware's
+        -- unusual address multiplexing scheme. It combines the GBA's upper address
+        -- bus (GP_16 to GP_21) with the lower address bus (via internal_address)
+        -- to form the SDRAM row and column addresses.
+        
+        -- Default assignments for safety in unused states
+        ddr_address      <= (others => '0');
+        ddr_bank_address <= "00";
+
         case ddr_state is
             when DDR_ACTIVATE | DDR_PRECHARGE | DDR_REFRESH =>
-                -- Row address
-                ddr_address <= internal_address(12 downto 0);
+                -- Row Address Composition, based on original.vhd analysis
+                ddr_address(12) <= GP_21;
+                ddr_address(11) <= GP_20;
+                ddr_address(10) <= GP_19;
+                ddr_address(9)  <= GP_18;
+                ddr_address(8)  <= GP_17;
+                ddr_address(7)  <= GP_16;
+                ddr_address(6)  <= internal_address(15);
+                ddr_address(5)  <= internal_address(14);
+                ddr_address(4)  <= internal_address(13);
+                ddr_address(3)  <= internal_address(12);
+                ddr_address(2)  <= internal_address(11);
+                ddr_address(1)  <= internal_address(10);
+                ddr_address(0)  <= internal_address(9);
+                
                 ddr_bank_address <= GP_23 & GP_22;
                 
             when DDR_READ | DDR_WRITE =>
-                -- Column Address
-                ddr_address <= "000" & internal_address(9 downto 0);
-                ddr_bank_address <= GP_23 & GP_22;
+                -- Column Address Composition, based on original.vhd analysis
+                -- The original leaves some address bits unchanged; we make this explicit.
+                -- High bits are zeroed as they are not part of the column address.
+                ddr_address(12 downto 11) <= "00";
+                ddr_address(10) <= GP_19; -- Note: Unusual dependency on a high-order GBA address bit.
+                ddr_address(9)  <= '0';
+                ddr_address(8)  <= internal_address(8);
+                ddr_address(7)  <= '0';
+                ddr_address(6)  <= internal_address(6);
+                ddr_address(5)  <= internal_address(5);
+                ddr_address(4)  <= internal_address(4);
+                ddr_address(3)  <= internal_address(3);
+                ddr_address(2)  <= internal_address(2);
+                ddr_address(1)  <= internal_address(1);
+                ddr_address(0)  <= internal_address(0);
+                
+                ddr_bank_address <= GP_23 & GP_22; -- Bank address is stable during operation
                 
             when others =>
-                ddr_address <= (others => '0');
-                ddr_bank_address <= "00";
+                -- In DDR_IDLE, address lines are don't care, but driving '0' is safe.
+                null;
         end case;
     end process;
     
@@ -395,18 +435,26 @@ begin
     -- ========================================================================
     -- Chip Enable Generation
     -- ========================================================================
-    
-    -- Flash chip enable
-    flash_chip_enable <= '0' when (current_mode = MODE_FLASH) and
-                                 GP_NCS = '0' else '1';
-    
-    FLASH_NCE <= flash_chip_enable;
-    
-    -- SD output enable
-    sd_output_enable <= '0' when (GP_NCS = '0' and config_sd_enable = '1') else '1';
+
+    -- This logic is a faithful reconstruction of the original hardware's
+    -- chip enable logic from original.vhd macrocells mc_E6 and the direct
+    -- equation for N_SDOUT. These signals are active-low.
+
+    -- FLASH_NCE is enabled when:
+    --  - GP_NCS is active (low)
+    --  - Not in DDR mode (config_map_reg is low)
+    --  - SD card is not enabled OR GP_23 is low
+    --  - clk3 is low (unusual dependency, but faithful to original)
+    FLASH_NCE <= (GP_NCS or clk3 or config_map_reg) or (config_sd_enable and GP_23);
+
+    -- N_SDOUT is enabled when:
+    --  - GP_NCS is active (low)
+    --  - SD card is enabled (config_sd_enable is high)
+    --  - GP_23 is high
+    --  - Not at the magic address
+    sd_output_enable <= GP_NCS or not GP_23 or not config_sd_enable or magic_address;
     
     N_SDOUT <= sd_output_enable;
-
     -- ========================================================================
     -- Read/Write Enable Synchronization
     -- ========================================================================
@@ -467,13 +515,21 @@ begin
         end loop;
         
         -- Middle nibble: more SD state vs toggle signals
-        for i in 4 to 7 loop
-            if GP_22 = '0' then
-                gp_output_data(i) <= sd_dat_state(i-4);
-            else
-                gp_output_data(i) <= sd_dat_state(i-4);
-            end if;
-        end loop;
+        -- This logic is a faithful reconstruction of the original's multiplexing
+        -- for the middle nibble of the GP bus.
+        if GP_22 = '0' then
+            -- When GP_22 is low, output various toggle/state signals
+            gp_output_data(4) <= sd_dat_toggle(2);  -- Corresponds to mc_F14 in original
+            gp_output_data(5) <= sd_common_logic;   -- Corresponds to mc_H9 in original
+            gp_output_data(6) <= sd_cmd_state;      -- Corresponds to mc_E13 in original
+            gp_output_data(7) <= sd_dat_state(0);   -- Corresponds to mc_H3 in original
+        else
+            -- When GP_22 is high, output a different mix of state signals
+            gp_output_data(4) <= sd_dat_state(3);   -- Corresponds to mc_E2 in original
+            gp_output_data(5) <= sd_dat_state(0);   -- Corresponds to mc_H3 in original
+            gp_output_data(6) <= sd_common_logic;   -- Corresponds to mc_H9 in original
+            gp_output_data(7) <= sd_dat_state(3);   -- Corresponds to mc_E2 in original
+        end if;
         
         -- Upper byte: mix of SD DAT lines, constants, and toggle signals
         gp_output_data(8)  <= SD_DAT(0) when GP_22 = '0' else clk3;
@@ -543,27 +599,27 @@ begin
     process(GP_NCS)
         constant GP_BITS : std_logic_vector(3 downto 0) := GP(10) & GP(11) & GP(8) & GP(9);
         constant SD_BITS : std_logic_vector(3 downto 0) := SD_DAT(2) & SD_DAT(3) & SD_DAT(0) & SD_DAT(1);
+        variable term1, term2 : std_logic;
     begin
         if rising_edge(GP_NCS) then
             -- Generate toggle logic for all 4 DAT lines
             for i in 0 to 3 loop
-                if (not GP_19 and not GP_BITS(i) and address_load_sync2 and not address_load_sync) = '1' then
-                    sd_dat_toggle(i) <= not sd_dat_toggle(i);
-                elsif ((not GP_19 and not sd_dat_toggle(i) and address_load_sync2) or
+                -- This logic implements a T-FlipFlop based on the original design's equations.
+                -- T = term1 XOR term2
+                -- Q(n+1) = T XOR Q(n)
+                term1 := (not GP_19 and not GP_BITS(i) and address_load_sync2 and not address_load_sync);
+                term2 := ((not GP_19 and not sd_dat_toggle(i) and address_load_sync2) or
                        (not GP_22 and SD_BITS(i) and not sd_dat_toggle(i) and not address_load_sync2 and not timing_sync3 and timing_sync4) or
-                       (not GP_22 and not SD_BITS(i) and sd_dat_toggle(i) and not address_load_sync2 and not timing_sync3 and timing_sync4)) = '1' then
-                    sd_dat_toggle(i) <= not sd_dat_toggle(i);
-                end if;
+                       (not GP_22 and not SD_BITS(i) and sd_dat_toggle(i) and not address_load_sync2 and not timing_sync3 and timing_sync4));
+                sd_dat_toggle(i) <= (term1 xor term2) xor sd_dat_toggle(i);
             end loop;
             
             -- CMD Toggle (special case)
-            if (not GP_19 and not GP(12) and address_load_sync2 and not address_load_sync) = '1' then
-                sd_cmd_toggle <= not sd_cmd_toggle;
-            elsif ((not GP_19 and not sd_cmd_toggle and address_load_sync2) or
+            term1 := (not GP_19 and not GP(12) and address_load_sync2 and not address_load_sync);
+            term2 := ((not GP_19 and not sd_cmd_toggle and address_load_sync2) or
                    (not GP_22 and not sd_cmd_toggle and sd_dat_toggle(2) and not address_load_sync2 and not timing_sync3 and timing_sync4) or
-                   (not GP_22 and sd_cmd_toggle and not sd_dat_toggle(2) and not address_load_sync2 and not timing_sync3 and timing_sync4)) = '1' then
-                sd_cmd_toggle <= not sd_cmd_toggle;
-            end if;
+                   (not GP_22 and sd_cmd_toggle and not sd_dat_toggle(2) and not address_load_sync2 and not timing_sync3 and timing_sync4));
+            sd_cmd_toggle <= (term1 xor term2) xor sd_cmd_toggle;
         end if;
     end process;
     
