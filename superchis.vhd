@@ -4,333 +4,370 @@ use IEEE.NUMERIC_STD.ALL;
 
 entity superchis is
     port (
-        -- Global Clocks and Control
-        CLK50MHz : in  std_logic;
-        GP_NCS   : in  std_logic;  -- GBA Chip Select (Active Low)
-        GP_NWR   : in  std_logic;  -- GBA Write Enable (Active Low)
-        GP_NRD   : in  std_logic;  -- GBA Read Enable (Active Low)
-        clk3     : in  std_logic;  -- Auxiliary Clock
+        -- Global Clocks and Control / 全局时钟与控制信号
+        CLK50MHz : in  std_logic;  -- 50MHz main clock input / 50MHz 主时钟输入
+        GP_NCS   : in  std_logic;  -- GBA Cartridge Chip Select (Active Low) / GBA卡带片选 (低电平有效)
+        GP_NWR   : in  std_logic;  -- GBA Write Enable (Active Low) / GBA写使能 (低电平有效)
+        GP_NRD   : in  std_logic;  -- GBA Read Enable (Active Low) / GBA读使能 (低电平有效)
+        clk3     : in  std_logic;  -- Auxiliary Clock (Original design dependency) / 辅助时钟 (源于原始设计)
 
-        -- General Purpose IO (from GBA cart edge)
-        GP       : inout std_logic_vector(15 downto 0);  -- GBA Data Bus
-        GP_16    : in  std_logic;
-        GP_17    : in  std_logic;
-        GP_18    : in  std_logic;
-        GP_19    : in  std_logic;
-        GP_20    : in  std_logic;
-        GP_21    : in  std_logic;
-        GP_22    : in  std_logic;
-        GP_23    : in  std_logic;
+        -- General Purpose IO (from GBA cart edge) / GBA卡带接口通用IO
+        GP       : inout std_logic_vector(15 downto 0);  -- GBA Data Bus (Address/Data multiplexed) / GBA数据总线 (地址/数据复用)
+        GP_16    : in  std_logic;                       -- GBA Address Bus A16 / GBA地址总线 A16
+        GP_17    : in  std_logic;                       -- GBA Address Bus A17 / GBA地址总线 A17
+        GP_18    : in  std_logic;                       -- GBA Address Bus A18 / GBA地址总线 A18
+        GP_19    : in  std_logic;                       -- GBA Address Bus A19 / GBA地址总线 A19
+        GP_20    : in  std_logic;                       -- GBA Address Bus A20 / GBA地址总线 A20
+        GP_21    : in  std_logic;                       -- GBA Address Bus A21 / GBA地址总线 A21
+        GP_22    : in  std_logic;                       -- GBA Address Bus A22 / GBA地址总线 A22
+        GP_23    : in  std_logic;                       -- GBA Address Bus A23 / GBA地址总线 A23
 
-        -- DDR SDRAM Interface
-        DDR_A    : out std_logic_vector(12 downto 0);  -- DDR Address Bus
-        DDR_BA   : out std_logic_vector(1 downto 0);   -- DDR Bank Address
-        DDR_CKE  : out std_logic;                       -- DDR Clock Enable
-        DDR_NRAS : out std_logic;                       -- DDR Row Address Strobe (Active Low)
-        DDR_NCAS : out std_logic;                       -- DDR Column Address Strobe (Active Low)
-        DDR_NWE  : out std_logic;                       -- DDR Write Enable (Active Low)
+        -- DDR SDRAM Interface / DDR SDRAM 接口
+        DDR_A    : out std_logic_vector(12 downto 0);  -- DDR Address Bus / DDR 地址总线
+        DDR_BA   : out std_logic_vector(1 downto 0);   -- DDR Bank Address / DDR 存储体地址
+        DDR_CKE  : out std_logic;                       -- DDR Clock Enable / DDR 时钟使能
+        DDR_NRAS : out std_logic;                       -- DDR Row Address Strobe (Active Low) / DDR 行地址选通 (低电平有效)
+        DDR_NCAS : out std_logic;                       -- DDR Column Address Strobe (Active Low) / DDR 列地址选通 (低电平有效)
+        DDR_NWE  : out std_logic;                       -- DDR Write Enable (Active Low) / DDR 写使能 (低电平有效)
 
-        -- Flash Interface
-        FLASH_A          : out std_logic_vector(15 downto 0);  -- Flash Address Bus
-        FLASH_NCE        : out std_logic;                       -- Flash Chip Enable (Active Low)
-        FLASH_SRAM_NWE   : out std_logic;                       -- Flash Write Enable (Active Low)
-        FLASH_SRAM_NOE   : out std_logic;                       -- Flash Output Enable (Active Low)
-        SRAM_A16         : out std_logic;                       -- SRAM High Address bit
+        -- Flash Interface / 闪存接口
+        FLASH_A          : out std_logic_vector(15 downto 0);  -- Flash Address Bus / 闪存地址总线
+        FLASH_NCE        : out std_logic;                       -- Flash Chip Enable (Active Low) / 闪存片选 (低电平有效)
+        FLASH_SRAM_NWE   : out std_logic;                       -- Flash/SRAM Write Enable (Active Low) / 闪存/SRAM 写使能 (低电平有效)
+        FLASH_SRAM_NOE   : out std_logic;                       -- Flash/SRAM Output Enable (Active Low) / 闪存/SRAM 输出使能 (低电平有效)
+        SRAM_A16         : out std_logic;                       -- SRAM High Address bit (for banking) / SRAM 高位地址 (用于Bank切换)
 
-        -- SD Card Interface
-        N_SDOUT : out std_logic;                          -- SD Card Output Enable (Active Low)
-        SD_CLK  : out std_logic;                          -- SD Card Clock
-        SD_CMD  : inout std_logic;                        -- SD Card Command Line
-        SD_DAT  : inout std_logic_vector(3 downto 0)      -- SD Card Data Lines
+        -- SD Card Interface / SD卡接口
+        N_SDOUT : out std_logic;                          -- SD Card I/O Output Enable (Active Low) / SD卡IO输出使能 (低电平有效)
+        SD_CLK  : out std_logic;                          -- SD Card Clock / SD卡时钟
+        SD_CMD  : inout std_logic;                        -- SD Card Command Line / SD卡命令线
+        SD_DAT  : inout std_logic_vector(3 downto 0)      -- SD Card Data Lines / SD卡数据线
     );
 end entity superchis;
 
 architecture behavioral of superchis is
 
     -- ========================================================================
-    -- Type Definitions
+    -- Type Definitions / 类型定义
     -- ========================================================================
     
-    -- DDR SDRAM State Machine
+    -- DDR SDRAM State Machine / DDR SDRAM 状态机
     type ddr_state_t is (
-        DDR_IDLE,
-        DDR_PRECHARGE,
-        DDR_ACTIVATE,
-        DDR_READ,
-        DDR_WRITE,
-        DDR_REFRESH
+        DDR_IDLE,       -- Idle state / 空闲状态
+        DDR_PRECHARGE,  -- Precharge command / 预充电
+        DDR_ACTIVATE,   -- Activate command (open a row) / 行激活
+        DDR_READ,       -- Read command / 读命令
+        DDR_WRITE,      -- Write command / 写命令
+        DDR_REFRESH     -- Refresh command / 刷新命令
     );
     
-    -- Access Mode Types
+    -- Access Mode Types / 访问模式类型
     type access_mode_t is (
-        MODE_FLASH,
-        MODE_DDR,
-        MODE_SD
+        MODE_FLASH,     -- Accessing Flash/SRAM / 访问闪存或SRAM
+        MODE_DDR,       -- Accessing DDR SDRAM / 访问DDR SDRAM
+        MODE_SD         -- Accessing SD Card I/O / 访问SD卡IO
     );
 
     -- ========================================================================
-    -- Internal Signals
+    -- Internal Signals / 内部信号
     -- ========================================================================
     
-    -- Configuration Registers
-    signal config_map_reg     : std_logic := '0';          -- 0=Flash, 1=DDR
-    signal config_sd_enable   : std_logic := '0';          -- SD Card Enable
-    signal config_write_enable: std_logic := '0';          -- Write Enable
-    signal config_bank_select : std_logic_vector(2 downto 0) := "000";  -- Bank Selection
+    -- Configuration Registers / 配置寄存器
+    -- These registers are set via the magic unlock sequence. / 这些寄存器通过“魔术解锁序列”设置。
+    signal config_map_reg     : std_logic := '0';          -- Memory map control: 0=Flash, 1=DDR / 内存映射控制
+    signal config_sd_enable   : std_logic := '0';          -- SD Card I/O interface enable / SD卡IO接口使能
+    signal config_write_enable: std_logic := '0';          -- General write enable (used for SRAM A16, etc.) / 通用写使能 (用于SRAM A16等)
+    signal config_bank_select : std_logic_vector(2 downto 0) := "000";  -- Flash memory bank selection bits / Flash闪存的Bank选择位
     
-    -- Magic Unlock Sequence
-    signal magic_address      : std_logic := '0';          -- Magic Address Detection
-    signal magic_value_match  : std_logic := '0';          -- Magic Value (0xA55A) Detection
-    signal config_load_enable : std_logic := '0';          -- Configuration Load Enable
-    signal magic_write_count  : unsigned(1 downto 0) := "00"; -- Count magic value writes
+    -- Magic Unlock Sequence / 魔术解锁序列
+    -- Logic to detect the specific address/data sequence to unlock configuration. / 用于检测特定地址/数据序列以解锁配置功能的逻辑。
+    signal magic_address      : std_logic := '0';          -- Detects access to the magic address (0x09FFFFFE) / 检测是否访问魔术地址
+    signal magic_value_match  : std_logic := '0';          -- Detects the magic value (0xA55A) on the data bus / 检测总线上是否出现魔术值
+    signal config_load_enable : std_logic := '0';          -- Enable signal for loading configuration / 配置加载使能信号
+    signal magic_write_count  : unsigned(1 downto 0) := "00"; -- Counts the magic value writes (requires 2) / 对魔术值写入次数进行计数 (需要2次)
     
-    -- Address Management
-    signal internal_address   : unsigned(15 downto 0) := (others => '0');  -- Internal Address Counter
-    signal flash_address      : std_logic_vector(15 downto 0);  -- Flash Address Bus
-    signal ddr_address        : std_logic_vector(12 downto 0);   -- DDR Address Bus
-    signal ddr_bank_address   : std_logic_vector(1 downto 0);    -- DDR Bank Address
+    -- Address Management / 地址管理
+    signal internal_address   : unsigned(15 downto 0) := (others => '0');  -- Internal 16-bit address counter / 内部16位地址计数器
+    signal flash_address      : std_logic_vector(15 downto 0);  -- Address bus going to the Flash chip / 连接到Flash芯片的地址总线
+    signal ddr_address        : std_logic_vector(12 downto 0);   -- Address bus going to the DDR SDRAM / 连接到DDR SDRAM的地址总线
+    signal ddr_bank_address   : std_logic_vector(1 downto 0);    -- Bank address for DDR SDRAM / DDR SDRAM的Bank地址
     
-    -- DDR Control Signals
-    signal ddr_state          : ddr_state_t := DDR_IDLE;
-    signal ddr_counter        : unsigned(3 downto 0) := (others => '0');
-    signal ddr_refresh_counter: unsigned(8 downto 0) := (others => '0');
-    signal ddr_cke_reg        : std_logic := '0';
-    signal ddr_ras_reg        : std_logic := '1';
-    signal ddr_cas_reg        : std_logic := '1';
-    signal ddr_we_reg         : std_logic := '1';
+    -- DDR Control Signals / DDR控制信号
+    signal ddr_state          : ddr_state_t := DDR_IDLE;    -- Current state of the DDR state machine / DDR状态机的当前状态
+    signal ddr_counter        : unsigned(3 downto 0) := (others => '0'); -- Counter for timing within DDR states / 用于DDR状态内部时序的计数器
+    signal ddr_refresh_counter: unsigned(8 downto 0) := (others => '0'); -- Counter to trigger auto-refresh / 用于触发自动刷新的计数器
+    signal ddr_cke_reg        : std_logic := '0';           -- DDR CKE signal register / DDR CKE信号寄存器
+    signal ddr_ras_reg        : std_logic := '1';           -- DDR nRAS signal register / DDR nRAS信号寄存器
+    signal ddr_cas_reg        : std_logic := '1';           -- DDR nCAS signal register / DDR nCAS信号寄存器
+    signal ddr_we_reg         : std_logic := '1';           -- DDR nWE signal register / DDR nWE信号寄存器
     
-    -- Access Control
-    signal current_mode       : access_mode_t := MODE_FLASH;
-    signal sd_output_enable   : std_logic := '1';
+    -- Access Control / 访问控制
+    signal current_mode       : access_mode_t := MODE_FLASH; -- Current top-level access mode / 当前顶层访问模式
+    signal sd_output_enable   : std_logic := '1';           -- Master output enable for the SD card I/O block / SD卡IO模块的主输出使能
     
-    -- Bus Control
-    signal gp_output_enable   : std_logic := '0';
-    signal gp_output_data     : std_logic_vector(15 downto 0) := (others => '0');
+    -- Bus Control / 总线控制
+    signal gp_output_enable   : std_logic := '0';           -- Output enable for the GP data bus / GP数据总线的输出使能
+    signal gp_output_data     : std_logic_vector(15 downto 0) := (others => '0'); -- Data to be driven onto the GP bus / 将要驱动到GP总线上的数据
     
-    -- Timing Control
-    signal address_load       : std_logic := '0';
-    signal address_load_sync  : std_logic := '0';  -- Synchronized version (equivalent to mc_H10)
-    signal address_load_sync2 : std_logic := '0';  -- Second stage sync (equivalent to mc_H5)
-    signal write_sync         : std_logic;
-    signal read_sync          : std_logic;
-    signal write_enable_sync  : std_logic;  -- Additional sync for write enable
-    signal timing_sync3       : std_logic := '0';  -- Equivalent to mc_H14
-    signal timing_sync4       : std_logic := '0';  -- Equivalent to mc_H15
+    -- Timing Control (Synchronizers) / 时序控制 (同步器)
+    -- These signals are synchronized versions of GBA bus signals, used to avoid metastability. / GBA总线信号的同步版本，用于避免亚稳态。
+    signal address_load       : std_logic := '0';           -- Latched signal indicating address phase / 标志地址阶段的锁存信号
+    signal address_load_sync  : std_logic := '0';           -- First stage sync (original: mc_H10) / 第一级同步
+    signal address_load_sync2 : std_logic := '0';           -- Second stage sync (original: mc_H5) / 第二级同步
+    signal write_sync         : std_logic;                  -- Synchronized GP_NWR / 同步后的GP_NWR
+    signal read_sync          : std_logic;                  -- Synchronized GP_NRD / 同步后的GP_NRD
+    signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3) / 同步后的写使能逻辑
+    signal timing_sync3       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
+    signal timing_sync4       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
     
-    -- SD Card Signals
-    signal sd_clock           : std_logic := '0';
-    signal sd_cmd_out         : std_logic := '1';
-    signal sd_data_out        : std_logic_vector(3 downto 0) := (others => '1');
-    signal sd_cmd_oe          : std_logic := '0';
-    signal sd_data_oe         : std_logic_vector(3 downto 0) := (others => '0');
+    -- SD Card Signals / SD卡信号
+    signal sd_clock           : std_logic := '0';           -- Clock signal for the SD card / 驱动SD卡的时钟
+    signal sd_cmd_out         : std_logic := '1';           -- Data to be driven on the SD_CMD line / 驱动到SD_CMD线上的数据
+    signal sd_data_out        : std_logic_vector(3 downto 0) := (others => '1'); -- Data to be driven on the SD_DAT lines / 驱动到SD_DAT线上的数据
+    signal sd_cmd_oe          : std_logic := '0';           -- Output enable for the SD_CMD line / SD_CMD线的输出使能
+    signal sd_data_oe         : std_logic_vector(3 downto 0) := (others => '0'); -- Output enable for the SD_DAT lines / SD_DAT线的输出使能
     
-    -- SD Card State Signals (equivalent to original macrocells)
-    signal sd_dat_state       : std_logic_vector(3 downto 0) := (others => '0');  -- mc_H3,F5,E0,E2
-    signal sd_cmd_state       : std_logic := '0';  -- mc_E13
-    signal sd_dat_toggle      : std_logic_vector(3 downto 0) := (others => '0');  -- mc_F0,F1,F14,F15
-    signal sd_cmd_toggle      : std_logic := '0';  -- mc_F7
-    signal sd_common_logic    : std_logic := '0';  -- mc_H9
+    -- SD Card State Signals (Reconstruction of original macrocells) / SD卡状态信号 (对原始宏单元的重构)
+    signal sd_dat_state       : std_logic_vector(3 downto 0) := (others => '0');  -- State latches for DAT lines (mc_H3,F5,E0,E2) / DAT线的状态锁存器
+    signal sd_cmd_state       : std_logic := '0';           -- State latch for CMD line (mc_E13) / CMD线的状态锁存器
+    signal sd_dat_toggle      : std_logic_vector(3 downto 0) := (others => '0');  -- Toggle flip-flops for DAT lines (mc_F0,F1,F14,F15) / DAT线的触发器
+    signal sd_cmd_toggle      : std_logic := '0';           -- Toggle flip-flop for CMD line (mc_F7) / CMD线的触发器
+    signal sd_common_logic    : std_logic := '0';           -- Shared logic for some SD outputs (mc_H9) / 用于部分SD输出的共享逻辑
 
 begin
 
     -- ========================================================================
-    -- Address Decoding and Mode Selection
+    -- Address Decoding and Mode Selection / 地址译码与模式选择
+    -- Determines the current operating mode based on configuration registers.
+    -- 基于配置寄存器的值，决定当前的芯片工作模式。
     -- ========================================================================
     
     process(internal_address, config_map_reg, config_sd_enable, GP_16, GP_17, GP_18, GP_19, GP_20, GP_21, GP_22, GP_23)
     begin
-        -- Default to Flash mode
+        -- Default to Flash mode / 默认为Flash模式
         current_mode <= MODE_FLASH;
         
         if config_sd_enable = '1' then
-            -- SD Card interface is mapped into ROM address space
+            -- SD Card interface is enabled and takes priority.
+            -- SD卡接口已使能，并拥有最高优先级。
             current_mode <= MODE_SD;
         elsif config_map_reg = '1' then
-            -- SDRAM mode (instead of internal Flash)
+            -- SDRAM mode is selected.
+            -- 选择SDRAM模式。
             current_mode <= MODE_DDR;
         else
-            -- Flash/SRAM mode (default)
-            -- SRAM is accessed through the same interface as Flash
-            -- Address decoding determines which physical device is selected
+            -- Default mode is Flash/SRAM access.
+            -- 默认为Flash/SRAM访问模式。
             current_mode <= MODE_FLASH;
         end if;
     end process;
 
     -- ========================================================================
-    -- Magic Address Detection and Configuration
+    -- Magic Address Detection and Configuration / 魔术地址检测与配置
+    -- Implements the unlock sequence required by the GBA driver.
+    -- A specific 4-write sequence to address 0x09FFFFFE configures the chip.
+    -- 实现GBA驱动所需的解锁序列。通过向地址0x09FFFFFE执行特定的4次写操作来配置芯片。
     -- ========================================================================
     
-    -- Magic address detection: 0x09FFFFFE->0x01FFFFFE(8bit)->0x00FFFFFF(16bit) (SuperCard mode register)
+    -- Magic address detection: 0x00FFFFFF(0x09FFFFFE in GBA) (A23-A16=0xFF, A15-A0=0xFFFF)
+    -- GBA address is byte-addressed, VHDL uses 16-bit words. So 0xFFFE -> 0xFFFF.
+    -- 魔术地址检测: 0x00FFFFFF (字节地址) -> 内部地址 A23-A16=FFh, A15-A0=FFFFh -> 内部16位字地址 FFFFh
     magic_address <= '1' when (internal_address = x"FFFF" and
                                GP_16 = '1' and GP_17 = '1' and GP_18 = '1' and GP_19 = '1' and
                                GP_20 = '1' and GP_21 = '1' and GP_22 = '1' and GP_23 = '1') else '0';
     
-    -- Magic value detection: 0xA55A
+    -- Magic value detection: 0xA55A on the data bus.
+    -- 魔术值检测: 数据总线上的0xA55A。
     magic_value_match <= '1' when (GP(15 downto 0) = x"A55A") else '0';
     
-    -- Magic sequence state machine to match driver behavior (2x magic, 2x config)
+    -- Magic sequence state machine: requires two writes of 0xA55A, followed by two config writes.
+    -- 魔术序列状态机: 需要两次写入0xA55A，随后是两次配置写入。
     process(GP_NWR)
     begin
         if rising_edge(GP_NWR) then
             if magic_address = '1' then
                 case magic_write_count is
-                    when "00" => -- Expect first magic value
+                    when "00" => -- Expect first magic value / 等待第一个魔术值
                         if magic_value_match = '1' then
                             magic_write_count <= "01";
                         end if;
-                    when "01" => -- Expect second magic value
+                    when "01" => -- Expect second magic value / 等待第二个魔术值
                         if magic_value_match = '1' then
                             magic_write_count <= "10";
                         else
-                            magic_write_count <= "00"; -- Reset on wrong value
+                            magic_write_count <= "00"; -- Reset on wrong value / 值错误则复位
                         end if;
-                    when "10" => -- Expect first config value
-                        -- Load config registers on the first config write
+                    when "10" => -- Expect first config value, load it. / 等待第一个配置值并加载
                         config_sd_enable    <= GP(1);
                         config_map_reg      <= GP(0);
                         config_write_enable <= GP(2);
-                        -- Load flash banking bits, faithfully matching original.vhd logic
+                        -- Faithfully reconstruct the original's complex flash banking logic.
+                        -- 忠实地重构原始设计中复杂的Flash Bank逻辑。
                         config_bank_select(0) <= GP(4) and not GP(8) and GP(12); -- mc_C10
                         config_bank_select(1) <= GP(7) and not GP(10) and GP(11);-- mc_G14
                         config_bank_select(2) <= GP(7) and GP(9) and not GP(15); -- mc_D9
                         magic_write_count   <= "11";
-                    when "11" => -- Expect second config value, then reset
+                    when "11" => -- Expect second config value, then reset sequence. / 等待第二个配置值，然后复位序列
                         magic_write_count <= "00";
                     when others =>
                         magic_write_count <= "00";
                 end case;
             else
-                -- If write is not to magic address, reset the sequence
+                -- If write is not to magic address, reset the sequence.
+                -- 如果写操作未指向魔术地址，则复位序列。
                 magic_write_count <= "00";
             end if;
         end if;
     end process;
 
     -- ========================================================================
-    -- Internal Address Counter
+    -- Internal Address Counter / 内部地址计数器
+    -- Latches the address from the GP bus or auto-increments for sequential access.
+    -- 从GP总线锁存地址，或在连续访问时自动递增。
     -- ========================================================================
     
-    -- Address load control (equivalent to original addr_load logic)
-    -- Original: addr_load <= (GP_NWR and GP_NRD and addr_load) or GP_NCS;
-    -- This is a latch that holds '1' when GP_NCS is high, and maintains state when both GP_NWR and GP_NRD are high
+    -- Address load control latch. (Original: addr_load <= (GP_NWR and GP_NRD and addr_load) or GP_NCS;)
+    -- This latch holds '1' when GP_NCS is high (inactive), allowing the address to be loaded.
+    -- 地址加载控制锁存器。当GP_NCS为高（非活动）时，该锁存器保持'1'，允许加载新地址。
     address_load <= (GP_NWR and GP_NRD and address_load) or GP_NCS;
     
-    -- Internal address counter with load capability
+    -- Internal address counter process.
+    -- The clock is a composite signal derived from GBA control signals, as in the original design.
+    -- 内部地址计数器进程。其时钟是GBA控制信号的组合，与原始设计一致。
     process(GP_NCS, GP_NWR, GP_NRD)
         variable addr_clock : std_logic;
     begin
         -- Generate address counter clock (equivalent to mc_H11 in original)
+        -- 为地址计数器生成时钟 (等效于原始设计的mc_H11)
         addr_clock := (not GP_NCS and GP_NWR and GP_NRD) or 
                      (GP_NCS and not GP_NRD) or 
                      (GP_NCS and not GP_NWR);
         
         if rising_edge(addr_clock) then
             if address_load = '1' then
+                -- Load address from GBA data bus
+                -- 从GBA数据总线加载地址
                 internal_address <= unsigned(GP);
             else
+                -- Auto-increment for next sequential address
+                -- 自动递增以访问下一个地址
                 internal_address <= internal_address + 1;
             end if;
         end if;
     end process;
 
     -- ========================================================================
-    -- Flash Address Generation
+    -- Flash Address Generation / Flash地址生成
+    -- Implements the complex, non-standard banking logic from the original CPLD.
+    -- 实现源自原始CPLD的、复杂的、非标准的Bank切换逻辑。
     -- ========================================================================
     
     process(internal_address, config_bank_select, current_mode, config_write_enable)
     begin
         -- Default to a direct mapping of the internal address
+        -- 默认直接映射内部地址
         flash_address <= std_logic_vector(internal_address);
         
         -- Bank selection for extended addressing, faithfully matching original.vhd
+        -- 用于扩展地址的Bank选择逻辑，忠实匹配original.vhd
         if current_mode = MODE_FLASH then
             -- The original design uses OR logic to apply banking bits to the address.
             -- This is a direct reconstruction of the logic found in GLB C and D.
+            -- 原始设计使用“或”逻辑将Bank位应用到地址上。这是对GLB C和D中逻辑的直接重构。
             flash_address(15) <= internal_address(15) or config_bank_select(2) or config_bank_select(1) or config_bank_select(0); -- mc_D0
             flash_address(14) <= internal_address(14) or config_bank_select(1); -- mc_C6
             flash_address(11) <= internal_address(11) or config_bank_select(2); -- mc_D2
-            flash_address(7)  <= internal_address(7)  or config_bank_select(0); -- mc_D1 (original was iaddr(4), typo in original)
+            flash_address(7)  <= internal_address(7)  or config_bank_select(0); -- mc_D1
             
-            -- Flash address bit 9 gating (equivalent to mc_E7 in original)
-            -- Only allow A9 to be set when write is enabled
+            -- Flash address bit 9 is gated by the general write enable config bit.
+            -- Flash地址的第9位受通用写使能配置位的门控。
             flash_address(9) <= internal_address(9) and config_write_enable;
         end if;
     end process;
     
     FLASH_A <= flash_address;
     
-    -- SRAM A16 uses config_write_enable (equivalent to original WRITEENABLE)
+    -- SRAM A16 is directly controlled by the general write enable config bit for simple banking.
+    -- SRAM A16由通用写使能配置位直接控制，用于实现简单的Bank切换。
     SRAM_A16 <= config_write_enable;
 
     -- ========================================================================
-    -- DDR SDRAM Controller
+    -- DDR SDRAM Controller / DDR SDRAM 控制器
+    -- A simple state machine to handle basic DDR commands.
+    -- NOTE: The refresh logic is clocked by GP_NCS, which is not ideal but
+    -- is a faithful reconstruction of the original, potentially flawed design.
+    -- 一个用于处理基本DDR命令的简单状态机。
+    -- 注意: 刷新逻辑由GP_NCS驱动，这并不理想，但这是对原始设计（可能存在缺陷）的忠实重构。
     -- ========================================================================
     
-    -- DDR State Machine
+    -- DDR State Machine, clocked by the rising edge of GP_NCS (when a GBA cycle ends).
+    -- DDR状态机，由GP_NCS上升沿（GBA总线周期结束时）驱动。
     process(GP_NCS)
     begin
         if rising_edge(GP_NCS) then
             case ddr_state is
                 when DDR_IDLE =>
                     ddr_counter <= (others => '0');
-                    -- DDR operation requires mc_E3 and mc_H0 to be high
-                    -- mc_E3 = GP_NWR or not WRITEENABLE (high when not writing or write disabled)
-                    -- mc_H0 = GP_NRD (high when not reading)
-                    -- So DDR starts when not actively reading/writing
+                    -- A DDR operation can start if the bus is idle (no read/write).
+                    -- 如果总线空闲（无读写），则可以开始DDR操作。
                     if current_mode = MODE_DDR and 
                        write_enable_sync = '1' and read_sync = '1' then
                         ddr_state <= DDR_ACTIVATE;
+                    -- Trigger a refresh cycle if the refresh counter overflows.
+                    -- 如果刷新计数器溢出，则触发刷新周期。
                     elsif ddr_refresh_counter(8) = '1' then
                         ddr_state <= DDR_REFRESH;
                     end if;
                     
                 when DDR_ACTIVATE =>
                     ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0010" then  -- tRCD timing
-                        -- Write if GP_NWR is low and write is enabled
+                    if ddr_counter = "0010" then  -- Wait for tRCD (RAS to CAS delay) / 等待tRCD延迟
                         if GP_NWR = '0' and config_write_enable = '1' then
                             ddr_state <= DDR_WRITE;
                         elsif GP_NRD = '0' then
                             ddr_state <= DDR_READ;
                         else
-                            ddr_state <= DDR_IDLE;  -- No read/write, go to idle
+                            ddr_state <= DDR_IDLE;  -- No R/W, return to idle / 无读写，返回空闲
                         end if;
                     end if;
                     
                 when DDR_READ =>
                     ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0100" then  -- Read latency
+                    if ddr_counter = "0100" then  -- Wait for read latency (CL) / 等待读延迟
                         ddr_state <= DDR_PRECHARGE;
                     end if;
                     
                 when DDR_WRITE =>
                     ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0010" then  -- Write timing
+                    if ddr_counter = "0010" then  -- Wait for write recovery (tWR) / 等待写恢复时间
                         ddr_state <= DDR_PRECHARGE;
                     end if;
                     
                 when DDR_PRECHARGE =>
                     ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0011" then  -- tRP timing
+                    if ddr_counter = "0011" then  -- Wait for precharge time (tRP) / 等待预充电时间
                         ddr_state <= DDR_IDLE;
                     end if;
                     
                 when DDR_REFRESH =>
                     ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0111" then  -- Refresh timing
+                    if ddr_counter = "0111" then  -- Wait for refresh cycle time (tRFC) / 等待刷新周期时间
                         ddr_state <= DDR_IDLE;
                         ddr_refresh_counter <= (others => '0');
                     end if;
             end case;
             
-            -- Refresh counter
+            -- Increment refresh counter when not in a refresh cycle.
+            -- 在非刷新周期内，递增刷新计数器。
             if ddr_state /= DDR_REFRESH then
                 ddr_refresh_counter <= ddr_refresh_counter + 1;
             end if;
         end if;
     end process;
     
-    -- DDR Command Generation
+    -- DDR Command Generation / DDR命令生成
+    -- Generates DDR control signals (CKE, nRAS, nCAS, nWE) based on the current state.
+    -- 基于当前状态生成DDR控制信号。
     process(ddr_state, current_mode, write_enable_sync)
     begin
         ddr_cke_reg <= '0';
@@ -339,29 +376,26 @@ begin
         ddr_we_reg  <= '1';
         
         if current_mode = MODE_DDR then
-            ddr_cke_reg <= '1';
+            ddr_cke_reg <= '1'; -- Keep CKE high when DDR mode is active / DDR模式激活时保持CKE为高
             
             case ddr_state is
                 when DDR_ACTIVATE =>
-                    ddr_ras_reg <= '0';  -- RAS active
+                    ddr_ras_reg <= '0';  -- Assert nRAS for ACTIVATE command / 发送激活命令
                     
                 when DDR_READ =>
-                    ddr_cas_reg <= '0';  -- CAS active for read
+                    ddr_cas_reg <= '0';  -- Assert nCAS for READ command / 发送读命令
                     
                 when DDR_WRITE =>
-                    -- The decision to write is made when entering this state.
-                    -- The previous condition on write_enable_sync was incorrect as the
-                    -- signal is '0' during a write, preventing the command from issuing.
-                    ddr_cas_reg <= '0';  -- CAS active
-                    ddr_we_reg  <= '0';  -- WE active for write
+                    ddr_cas_reg <= '0';  -- Assert nCAS for WRITE command / 发送写命令
+                    ddr_we_reg  <= '0';  -- Assert nWE for WRITE command
                     
                 when DDR_PRECHARGE =>
-                    ddr_ras_reg <= '0';  -- RAS active
-                    ddr_we_reg  <= '0';  -- WE active for precharge
+                    ddr_ras_reg <= '0';  -- Assert nRAS for PRECHARGE command / 发送预充电命令
+                    ddr_we_reg  <= '0';  -- Assert nWE for PRECHARGE command
                     
                 when DDR_REFRESH =>
-                    ddr_ras_reg <= '0';  -- RAS active
-                    ddr_cas_reg <= '0';  -- CAS active for refresh
+                    ddr_ras_reg <= '0';  -- Assert nRAS for REFRESH command / 发送刷新命令
+                    ddr_cas_reg <= '0';  -- Assert nCAS for REFRESH command
                     
                 when others =>
                     null;
@@ -369,21 +403,19 @@ begin
         end if;
     end process;
     
-    -- DDR Address Multiplexing
+    -- DDR Address Multiplexing / DDR地址复用
+    -- Composes the DDR row/column address from the GBA's full 24-bit address bus.
+    -- This is a faithful reconstruction of the original's unusual multiplexing scheme.
+    -- 从GBA完整的24位地址总线中组合出DDR的行/列地址。
+    -- 这是对原始设计中非标准复用方案的忠实重构。
     process(ddr_state, internal_address, GP_16, GP_17, GP_18, GP_19, GP_20, GP_21, GP_22, GP_23)
     begin
-        -- This logic is a faithful reconstruction of the original hardware's
-        -- unusual address multiplexing scheme. It combines the GBA's upper address
-        -- bus (GP_16 to GP_21) with the lower address bus (via internal_address)
-        -- to form the SDRAM row and column addresses.
-        
-        -- Default assignments for safety in unused states
         ddr_address      <= (others => '0');
         ddr_bank_address <= "00";
 
         case ddr_state is
             when DDR_ACTIVATE | DDR_PRECHARGE | DDR_REFRESH =>
-                -- Row Address Composition, based on original.vhd analysis
+                -- Row Address Composition / 行地址组合
                 ddr_address(12) <= GP_21;
                 ddr_address(11) <= GP_20;
                 ddr_address(10) <= GP_19;
@@ -401,11 +433,9 @@ begin
                 ddr_bank_address <= GP_23 & GP_22;
                 
             when DDR_READ | DDR_WRITE =>
-                -- Column Address Composition, based on original.vhd analysis
-                -- The original leaves some address bits unchanged; we make this explicit.
-                -- High bits are zeroed as they are not part of the column address.
+                -- Column Address Composition / 列地址组合
                 ddr_address(12 downto 11) <= "00";
-                ddr_address(10) <= GP_19; -- Note: Unusual dependency on a high-order GBA address bit.
+                ddr_address(10) <= GP_19; -- Note: Unusual dependency / 注意: 非典型的依赖关系
                 ddr_address(9)  <= '0';
                 ddr_address(8)  <= internal_address(8);
                 ddr_address(7)  <= '0';
@@ -417,10 +447,9 @@ begin
                 ddr_address(1)  <= internal_address(1);
                 ddr_address(0)  <= internal_address(0);
                 
-                ddr_bank_address <= GP_23 & GP_22; -- Bank address is stable during operation
+                ddr_bank_address <= GP_23 & GP_22; -- Bank address is stable / Bank地址保持稳定
                 
             when others =>
-                -- In DDR_IDLE, address lines are don't care, but driving '0' is safe.
                 null;
         end case;
     end process;
@@ -433,30 +462,30 @@ begin
     DDR_NWE  <= ddr_we_reg;
 
     -- ========================================================================
-    -- Chip Enable Generation
+    -- Chip Enable Generation / 片选信号生成
     -- ========================================================================
 
     -- This logic is a faithful reconstruction of the original hardware's
-    -- chip enable logic from original.vhd macrocells mc_E6 and the direct
-    -- equation for N_SDOUT. These signals are active-low.
+    -- chip enable logic from original.vhd macrocells. These signals are active-low.
+    -- 此逻辑忠实地重构了原始硬件(original.vhd)宏单元的片选逻辑。这些信号都是低电平有效。
 
-    -- FLASH_NCE is enabled when:
-    --  - GP_NCS is active (low)
-    --  - Not in DDR mode (config_map_reg is low)
-    --  - SD card is not enabled OR GP_23 is low
-    --  - clk3 is low (unusual dependency, but faithful to original)
+    -- FLASH_NCE is enabled when: GP_NCS is active, not in DDR mode, and not in SD mode (or GP_23 is low).
+    -- The clk3 dependency is unusual but faithful to the original.
+    -- FLASH_NCE在以下情况使能: GP_NCS有效, 非DDR模式, 且非SD模式(或GP_23为低)。
+    -- 对clk3的依赖不寻常，但忠于原始设计。
     FLASH_NCE <= (GP_NCS or clk3 or config_map_reg) or (config_sd_enable and GP_23);
 
-    -- N_SDOUT is enabled when:
-    --  - GP_NCS is active (low)
-    --  - SD card is enabled (config_sd_enable is high)
-    --  - GP_23 is high
-    --  - Not at the magic address
+    -- N_SDOUT (SD I/O block enable) is enabled when: GP_NCS is active, SD mode is enabled, and GP_23 is high.
+    -- It is disabled at the magic address to prevent conflicts.
+    -- N_SDOUT (SD I/O模块使能)在以下情况使能: GP_NCS有效, SD模式使能, 且GP_23为高。
+    -- 在魔术地址处该信号被禁用以防止冲突。
     sd_output_enable <= GP_NCS or not GP_23 or not config_sd_enable or magic_address;
     
     N_SDOUT <= sd_output_enable;
     -- ========================================================================
-    -- Read/Write Enable Synchronization
+    -- Read/Write Enable Synchronization / 读写信号同步
+    -- Synchronizes GBA bus signals to the internal 50MHz clock to prevent metastability.
+    -- 将GBA总线信号同步到内部50MHz时钟，以防止亚稳态问题。
     -- ========================================================================
     
     process(CLK50MHz)
@@ -465,93 +494,106 @@ begin
             write_sync <= GP_NWR;
             read_sync  <= GP_NRD;
             
-            -- Address load synchronization chain (equivalent to mc_H10 -> mc_H5 in original)
+            -- Address load synchronization chain (original: mc_H10 -> mc_H5)
+            -- 地址加载同步链
             address_load_sync <= address_load;
             address_load_sync2 <= address_load_sync;
             
-            -- Timing synchronization stages (equivalent to mc_H14, mc_H15 in original)
+            -- Timing synchronization stages (original: mc_H14, mc_H15)
+            -- 时序同步级
             timing_sync4 <= GP_NWR and GP_NRD;
             timing_sync3 <= timing_sync4;
             
-            -- Write enable synchronization (equivalent to mc_E3 in original)
-            -- This creates a synchronized write enable signal that affects DDR operation
-            -- mc_E3 <= GP_NWR or not WRITEENABLE in original code
+            -- Synchronized write enable logic (original: mc_E3)
+            -- 同步写使能逻辑
             write_enable_sync <= GP_NWR or not config_write_enable;
         end if;
     end process;
     
-    -- Use synchronized write enable for Flash/SRAM 
-    -- The logic here should match the original's behavior
+    -- Pass through GBA R/W signals to Flash/SRAM directly.
+    -- 将GBA的读写信号直接透传给Flash/SRAM。
     FLASH_SRAM_NWE <= GP_NWR;
     FLASH_SRAM_NOE <= GP_NRD;
 
     -- ========================================================================
-    -- GP Bus Output Control (Complete Implementation)
+    -- GP Bus Output Control / GP总线输出控制
+    -- Controls when the CPLD drives data onto the GBA's GP data bus.
+    -- 控制CPLD何时将数据驱动到GBA的GP数据总线上。
     -- ========================================================================
     
+    -- The GP bus is driven only during a GBA read cycle (GP_NRD='0') and when the SD I/O block is active.
+    -- GP总线仅在GBA读周期(GP_NRD='0')且SD I/O模块激活时才由本芯片驱动。
     gp_output_enable <= '1' when (GP_NRD = '0' and sd_output_enable = '0') else '0';
     
-    -- GP Bus Data Multiplexing (equivalent to original mc_E8, mc_E10, etc.)
+    -- GP Bus Data Multiplexing. What we drive depends on address bit GP_22.
+    -- This allows the GBA to read different internal states via the same address range.
+    -- GP总线数据复用。驱动何种数据取决于地址位GP_22。这允许GBA通过相同的地址范围读取不同的内部状态。
     process(GP_22, sd_cmd_toggle, SD_CMD, sd_dat_toggle, sd_cmd_state, sd_dat_state, 
             clk3, SD_DAT, sd_common_logic)
     begin
-        -- Lower nibble: SD card data/toggle signals vs actual SD interface
-        for i in 0 to 3 loop
-            if GP_22 = '0' then
-                case i is
-                    when 0 => gp_output_data(i) <= sd_cmd_toggle;     -- GP(0)
-                    when 1 => gp_output_data(i) <= sd_dat_toggle(1);  -- GP(1)
-                    when 2 => gp_output_data(i) <= sd_dat_toggle(0);  -- GP(2)
-                    when 3 => gp_output_data(i) <= sd_dat_toggle(3);  -- GP(3)
-                end case;
-            else
-                case i is
-                    when 0 => gp_output_data(i) <= SD_CMD;
-                    when 1 => gp_output_data(i) <= sd_cmd_state;
-                    when 2 => gp_output_data(i) <= sd_dat_state(1);
-                    when 3 => gp_output_data(i) <= sd_dat_state(2);
-                end case;
-            end if;
-        end loop;
-        
-        -- Middle nibble: more SD state vs toggle signals
-        -- This logic is a faithful reconstruction of the original's multiplexing
-        -- for the middle nibble of the GP bus.
-        if GP_22 = '0' then
-            -- When GP_22 is low, output various toggle/state signals
-            gp_output_data(4) <= sd_dat_toggle(2);  -- Corresponds to mc_F14 in original
-            gp_output_data(5) <= sd_common_logic;   -- Corresponds to mc_H9 in original
-            gp_output_data(6) <= sd_cmd_state;      -- Corresponds to mc_E13 in original
-            gp_output_data(7) <= sd_dat_state(0);   -- Corresponds to mc_H3 in original
-        else
-            -- When GP_22 is high, output a different mix of state signals
-            gp_output_data(4) <= sd_dat_state(3);   -- Corresponds to mc_E2 in original
-            gp_output_data(5) <= sd_dat_state(0);   -- Corresponds to mc_H3 in original
-            gp_output_data(6) <= sd_common_logic;   -- Corresponds to mc_H9 in original
-            gp_output_data(7) <= sd_dat_state(3);   -- Corresponds to mc_E2 in original
+        -- Lower nibble (GP 3:0) / 低半字节
+        if GP_22 = '0' then -- Read toggle flip-flop states / 读取触发器状态
+            gp_output_data(0) <= sd_cmd_toggle;
+            gp_output_data(1) <= sd_dat_toggle(1);
+            gp_output_data(2) <= sd_dat_toggle(0);
+            gp_output_data(3) <= sd_dat_toggle(3);
+        else -- Read SD line state or internal state / 读取SD线路状态或内部状态
+            gp_output_data(0) <= SD_CMD;
+            gp_output_data(1) <= sd_cmd_state;
+            gp_output_data(2) <= sd_dat_state(1);
+            gp_output_data(3) <= sd_dat_state(2);
         end if;
         
-        -- Upper byte: mix of SD DAT lines, constants, and toggle signals
-        gp_output_data(8)  <= SD_DAT(0) when GP_22 = '0' else clk3;
-        gp_output_data(9)  <= SD_DAT(1) when GP_22 = '0' else '0';
-        gp_output_data(10) <= '1' when GP_22 = '0' else SD_DAT(2);
-        gp_output_data(11) <= '1' when GP_22 = '0' else SD_DAT(3);
+        -- Middle nibble (GP 7:4) / 中间半字节
+        if GP_22 = '0' then -- Read toggle/state mix / 读取触发器/状态混合信号
+            gp_output_data(4) <= sd_dat_toggle(2);
+            gp_output_data(5) <= sd_common_logic;
+            gp_output_data(6) <= sd_cmd_state;
+            gp_output_data(7) <= sd_dat_state(0);
+        else -- Read state mix / 读取状态混合信号
+            gp_output_data(4) <= sd_dat_state(3);
+            gp_output_data(5) <= sd_dat_state(0);
+            gp_output_data(6) <= sd_common_logic;
+            gp_output_data(7) <= sd_dat_state(3);
+        end if;
         
-        -- Top nibble: constants vs toggle signals
-        gp_output_data(12) <= '1' when GP_22 = '0' else sd_dat_toggle(2);
-        gp_output_data(13) <= '1' when GP_22 = '0' else sd_dat_toggle(3);
-        gp_output_data(14) <= '1' when GP_22 = '0' else sd_dat_toggle(0);
-        gp_output_data(15) <= '1' when GP_22 = '0' else sd_dat_toggle(1);
+        -- Upper byte (GP 15:8) / 高字节
+        if GP_22 = '0' then -- Read SD DAT lines or constants / 读取SD DAT线或常量
+            gp_output_data(8)  <= SD_DAT(0);
+            gp_output_data(9)  <= SD_DAT(1);
+            gp_output_data(10) <= '1';
+            gp_output_data(11) <= '1';
+            gp_output_data(12) <= '1';
+            gp_output_data(13) <= '1';
+            gp_output_data(14) <= '1';
+            gp_output_data(15) <= '1';
+        else -- Read SD DAT lines, clk3, or toggle states / 读取SD DAT线, clk3, 或触发器状态
+            gp_output_data(8)  <= clk3;
+            gp_output_data(9)  <= '0';
+            gp_output_data(10) <= SD_DAT(2);
+            gp_output_data(11) <= SD_DAT(3);
+            gp_output_data(12) <= sd_dat_toggle(2);
+            gp_output_data(13) <= sd_dat_toggle(3);
+            gp_output_data(14) <= sd_dat_toggle(0);
+            gp_output_data(15) <= sd_dat_toggle(1);
+        end if;
     end process;
     
-    -- GP bus tri-state control
+    -- GP bus tri-state control. Drive the bus when enabled, otherwise high-impedance.
+    -- GP总线三态控制。使能时驱动总线，否则为高阻态。
     GP <= gp_output_data when gp_output_enable = '1' else (others => 'Z');
 
     -- ========================================================================
-    -- SD Card Interface (Complete Implementation)
+    -- SD Card Interface (Low-Level Bit-Banging Logic) / SD卡接口 (底层位操作逻辑)
+    -- This section is a very complex, cycle-accurate reconstruction of the
+    -- original CPLD's logic for direct SD card communication. It uses a
+    -- combination of state latches and toggle flip-flops.
+    -- 这部分是对原始CPLD中用于直接SD卡通信逻辑的、非常复杂的、周期精确的重构。
+    -- 它使用了状态锁存器和触发器(T-FlipFlop)的组合。
     -- ========================================================================
     
-    -- Helper function for SD state logic (reduces repetition)
+    -- Helper function to reduce repetition in the complex state logic.
+    -- 辅助函数，用于减少复杂状态逻辑中的代码重复。
     function sd_state_logic(gp22, gp_data, gp19, addr_sync2, addr_sync, timing3, timing4 : std_logic;
                            current_state, toggle_state : std_logic) return std_logic is
     begin
@@ -563,11 +605,13 @@ begin
                 (current_state or addr_sync2 or not timing3));
     end function;
     
-    -- SD Card State Machine (equivalent to original GLB E/F logic)
+    -- SD Card State Machine, clocked by the end of a GBA bus cycle (rising edge of GP_NCS).
+    -- SD卡状态机，由GBA总线周期结束时(GP_NCS上升沿)驱动。
     process(GP_NCS)
     begin
         if rising_edge(GP_NCS) then
-            -- Update all SD DAT states using the helper function
+            -- Update all SD DAT state latches based on a complex combination of inputs.
+            -- 基于复杂的输入组合，更新所有SD DAT状态锁存器。
             sd_dat_state(2) <= sd_state_logic(GP_22, GP(2), GP_19, address_load_sync2, address_load_sync,
                                              timing_sync3, timing_sync4, sd_dat_state(1), sd_dat_toggle(0));
             sd_dat_state(3) <= sd_state_logic(GP_22, GP(3), GP_19, address_load_sync2, address_load_sync,
@@ -577,7 +621,8 @@ begin
             sd_dat_state(0) <= sd_state_logic(GP_22, GP(4), GP_19, address_load_sync2, address_load_sync,
                                              timing_sync3, timing_sync4, sd_dat_state(3), sd_cmd_state);
             
-            -- SD CMD State (special case with SD_CMD input)
+            -- SD CMD State latch has its own unique logic.
+            -- SD CMD 状态锁存器有其自己独特的逻辑。
             sd_cmd_state <= (sd_cmd_state or address_load_sync2 or not timing_sync3) and
                            (GP_22 or sd_cmd_toggle or address_load_sync2 or timing_sync3 or not timing_sync4) and
                            (GP(0) or GP_19 or not address_load_sync2 or address_load_sync) and
@@ -585,7 +630,8 @@ begin
                            (not GP_19 or sd_cmd_state or not address_load_sync2) and
                            (sd_cmd_state or address_load_sync2 or timing_sync4);
             
-            -- SD Common Logic (for shared outputs)
+            -- Shared logic used for multiple outputs.
+            -- 用于多个输出的共享逻辑。
             sd_common_logic <= (GP_22 or sd_dat_state(3) or address_load_sync2 or timing_sync3 or not timing_sync4) and
                               (not GP_22 or address_load_sync2 or sd_dat_state(2) or timing_sync3 or not timing_sync4) and
                               (GP(7) or GP_19 or not address_load_sync2 or address_load_sync) and
@@ -595,18 +641,22 @@ begin
         end if;
     end process;
     
-    -- SD Card Toggle Logic (simplified with generate loop)
+    -- SD Card Toggle Flip-Flop Logic.
+    -- These are T-FlipFlops (T-FF) that change state when their 'T' input is asserted.
+    -- SD卡触发器(T-FF)逻辑。当其'T'输入被断言时，它们会改变状态。
     process(GP_NCS)
         constant GP_BITS : std_logic_vector(3 downto 0) := GP(10) & GP(11) & GP(8) & GP(9);
         constant SD_BITS : std_logic_vector(3 downto 0) := SD_DAT(2) & SD_DAT(3) & SD_DAT(0) & SD_DAT(1);
         variable term1, term2 : std_logic;
     begin
         if rising_edge(GP_NCS) then
-            -- Generate toggle logic for all 4 DAT lines
+            -- Generate toggle logic for all 4 DAT lines using a loop.
+            -- 使用循环为所有4条DAT线生成触发逻辑。
             for i in 0 to 3 loop
                 -- This logic implements a T-FlipFlop based on the original design's equations.
                 -- T = term1 XOR term2
                 -- Q(n+1) = T XOR Q(n)
+                -- 此逻辑基于原始设计的方程式实现了一个T触发器。
                 term1 := (not GP_19 and not GP_BITS(i) and address_load_sync2 and not address_load_sync);
                 term2 := ((not GP_19 and not sd_dat_toggle(i) and address_load_sync2) or
                        (not GP_22 and SD_BITS(i) and not sd_dat_toggle(i) and not address_load_sync2 and not timing_sync3 and timing_sync4) or
@@ -614,7 +664,8 @@ begin
                 sd_dat_toggle(i) <= (term1 xor term2) xor sd_dat_toggle(i);
             end loop;
             
-            -- CMD Toggle (special case)
+            -- CMD Toggle logic is a special case.
+            -- CMD线的触发逻辑是一个特例。
             term1 := (not GP_19 and not GP(12) and address_load_sync2 and not address_load_sync);
             term2 := ((not GP_19 and not sd_cmd_toggle and address_load_sync2) or
                    (not GP_22 and not sd_cmd_toggle and sd_dat_toggle(2) and not address_load_sync2 and not timing_sync3 and timing_sync4) or
@@ -623,16 +674,18 @@ begin
         end if;
     end process;
     
-    -- SD Interface Outputs (simplified)
-    SD_CLK <= (GP_NWR and GP_NRD) or sd_output_enable;
+    -- SD Interface Outputs / SD接口输出
+    SD_CLK <= (GP_NWR and GP_NRD) or sd_output_enable; -- Generate SD clock from GBA control signals / 从GBA控制信号生成SD时钟
     sd_cmd_out <= sd_common_logic;
     sd_data_out <= sd_dat_state(0) & sd_dat_state(1) & sd_dat_state(2) & sd_common_logic;
     
-    -- Output enable logic
+    -- Output enable logic for SD lines.
+    -- SD线路的输出使能逻辑。
     sd_cmd_oe <= not GP_NWR and GP_22 and not sd_output_enable;
     sd_data_oe <= (others => (not GP_NWR and not GP_22 and not sd_output_enable));
     
-    -- Tri-state control
+    -- Tri-state control for bidirectional SD lines.
+    -- 用于双向SD线路的三态控制。
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
     gen_sd_dat: for i in 0 to 3 generate
         SD_DAT(i) <= sd_data_out(i) when sd_data_oe(i) = '1' else 'Z';
