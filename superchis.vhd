@@ -266,6 +266,7 @@ begin
     begin
         -- Default to a direct mapping of the internal address
         -- 默认直接映射内部地址
+        -- 原版是 A0-A7 A2-A6 A3-A5 A4-A0 A5-A2 A6-A8 A7-A4 A8-A3
         flash_address <= std_logic_vector(internal_address);
         
         -- Bank selection for extended addressing, faithfully matching original.vhd
@@ -603,33 +604,37 @@ begin
     begin
         if rising_edge(GP_NCS) then
             -- mc_E0: sd_dat_state(0)
-            sd_dat_state(0) <= ((not GP_22 or sd_dat_state(3) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP_22 or sd_cmd_state or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP(4) or GP_19 or not address_load_sync2 or address_load_sync) and
+            -- Corrected based on report: depends on sd_dat_state(2), sd_dat_toggle(0)
+            sd_dat_state(0) <= ((not GP_22 or sd_dat_state(2) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP_22 or sd_dat_toggle(0) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP(2) or GP_19 or not address_load_sync2 or address_load_sync) and
                                 (not GP_19 or sd_dat_state(0) or not address_load_sync2) and
                                 (sd_dat_state(0) or address_load_sync2 or timing_sync4) and
                                 (sd_dat_state(0) or address_load_sync2 or not timing_sync3));
 
             -- mc_E2: sd_dat_state(1)
-            sd_dat_state(1) <= ((not GP_22 or sd_cmd_state or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP_22 or sd_dat_toggle(1) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP(1) or GP_19 or not address_load_sync2 or address_load_sync) and
+            -- Corrected based on report: depends on sd_dat_state(0), sd_dat_toggle(3)
+            sd_dat_state(1) <= ((not GP_22 or sd_dat_state(0) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP_22 or sd_dat_toggle(3) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP(3) or GP_19 or not address_load_sync2 or address_load_sync) and
                                 (not GP_19 or sd_dat_state(1) or not address_load_sync2) and
                                 (sd_dat_state(1) or address_load_sync2 or timing_sync4) and
                                 (sd_dat_state(1) or address_load_sync2 or not timing_sync3));
 
             -- mc_F5: sd_dat_state(2)
-            sd_dat_state(2) <= ((not GP_22 or sd_dat_state(1) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP_22 or sd_dat_toggle(0) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP(2) or GP_19 or not address_load_sync2 or address_load_sync) and
+            -- Corrected based on report: depends on sd_cmd_state, sd_dat_toggle(1)
+            sd_dat_state(2) <= ((not GP_22 or sd_cmd_state or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP_22 or sd_dat_toggle(1) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP(1) or GP_19 or not address_load_sync2 or address_load_sync) and
                                 (not GP_19 or sd_dat_state(2) or not address_load_sync2) and
                                 (sd_dat_state(2) or address_load_sync2 or timing_sync4) and
                                 (sd_dat_state(2) or address_load_sync2 or not timing_sync3));
 
             -- mc_H3: sd_dat_state(3)
-            sd_dat_state(3) <= ((not GP_22 or sd_dat_state(2) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP_22 or sd_dat_toggle(3) or address_load_sync2 or timing_sync3 or not timing_sync4) and
-                                (GP(3) or GP_19 or not address_load_sync2 or address_load_sync) and
+            -- Corrected based on report: depends on sd_dat_state(1), sd_cmd_state
+            sd_dat_state(3) <= ((not GP_22 or sd_dat_state(1) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP_22 or sd_cmd_state or address_load_sync2 or timing_sync3 or not timing_sync4) and
+                                (GP(4) or GP_19 or not address_load_sync2 or address_load_sync) and
                                 (not GP_19 or sd_dat_state(3) or not address_load_sync2) and
                                 (sd_dat_state(3) or address_load_sync2 or timing_sync4) and
                                 (sd_dat_state(3) or address_load_sync2 or not timing_sync3));
@@ -643,7 +648,8 @@ begin
                              (sd_cmd_state or address_load_sync2 or timing_sync4));
             
             -- mc_H9: sd_common_logic
-            sd_common_logic <= ((GP_22 or sd_dat_state(3) or address_load_sync2 or timing_sync3 or not timing_sync4) and
+            -- Corrected based on report. Note: mc_H7 from report is mapped to sd_dat_state(2) as it drives the same output pin SD-DAT2.
+            sd_common_logic <= ((GP_22 or sd_dat_state(1) or address_load_sync2 or timing_sync3 or not timing_sync4) and
                                 (not GP_22 or address_load_sync2 or sd_dat_state(2) or timing_sync3 or not timing_sync4) and
                                 (GP(7) or GP_19 or not address_load_sync2 or address_load_sync) and
                                 (not GP_19 or not address_load_sync2 or sd_common_logic) and
