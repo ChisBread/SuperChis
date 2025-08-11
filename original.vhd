@@ -2,7 +2,7 @@ library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
-entity top is
+entity superchis is
     port (
         -- Global Clocks and Control
         CLK50MHz : in  std_logic;
@@ -43,10 +43,10 @@ entity top is
         SD_CMD  : inout std_logic;
         SD_DAT  : inout std_logic_vector(3 downto 0)
     );
-end entity top;
+end entity superchis;
 
 -- 架构主体
-architecture behavioral of top is
+architecture behavioral of superchis is
 
     -- Internal Macrocell signals (CPLD内部宏单元信号)
     signal mc_A0, mc_A1, mc_A2, mc_A4, mc_A5, mc_A6, mc_A8, mc_A14, mc_A15 : std_logic;
@@ -183,6 +183,7 @@ architecture behavioral of top is
     signal N_DDR_SEL   : std_logic; -- DDR SDRAM 片选信号 (低有效)
     signal WRITEENABLE : std_logic; -- 写使能
     signal addr_load   : std_logic; -- 地址加载信号
+    signal N_SDOUT_internal : std_logic; -- SD卡输出使能内部信号
 
 begin
 
@@ -477,7 +478,8 @@ begin
         end if;
     end process;
     FLASH_A(9) <= mc_E7;
-    N_SDOUT <= GP_NCS or not GP_23 or not SDENABLE or MAGICADDR; -- SD卡输出使能（低有效）
+    N_SDOUT_internal <= GP_NCS or not GP_23 or not SDENABLE or MAGICADDR; -- SD卡输出使能（低有效）
+    N_SDOUT <= N_SDOUT_internal; -- 连接到输出端口
     FLASH_NCE <= mc_E6; -- Flash芯片使能（低有效）
     -- Simplified from (A|B)&(A|C) to A|(B&C)
     mc_E6 <= (GP_NCS or clk3 or MAP_REG) or (SDENABLE and GP_23);
@@ -559,22 +561,22 @@ begin
 
     -- GLB 4/5 Shared OE for GP(0-15) (GP总线输出使能控制)
     -- 当GP_NRD和N_SDOUT都为低时，GP总线作为输出
-    GP(0) <= mc_E8 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(1) <= mc_E10 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(2) <= mc_E12 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(3) <= mc_E14 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(4) <= mc_F2 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(5) <= mc_F3 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(6) <= mc_F4 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(7) <= mc_F6 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(8) <= mc_F8 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(9) <= mc_F10 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(10) <= mc_F12 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(11) <= mc_F13 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(12) <= mc_G4 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(13) <= mc_G12 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(14) <= mc_G10 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
-    GP(15) <= mc_G6 when (not GP_NRD and not N_SDOUT) = '1' else 'Z';
+    GP(0) <= mc_E8 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(1) <= mc_E10 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(2) <= mc_E12 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(3) <= mc_E14 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(4) <= mc_F2 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(5) <= mc_F3 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(6) <= mc_F4 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(7) <= mc_F6 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(8) <= mc_F8 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(9) <= mc_F10 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(10) <= mc_F12 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(11) <= mc_F13 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(12) <= mc_G4 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(13) <= mc_G12 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(14) <= mc_G10 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
+    GP(15) <= mc_G6 when (not GP_NRD and not N_SDOUT_internal) = '1' else 'Z';
 
     -- GLB 6 (G) - 内部计数器和控制逻辑
     -- Note: icntr(0-6) are handled in the GLB A process. This process is now empty.
@@ -680,7 +682,7 @@ begin
         end if;
     end process;
 
-    mc_H1 <= (GP_NWR and GP_NRD) or N_SDOUT;
+    mc_H1 <= (GP_NWR and GP_NRD) or N_SDOUT_internal;
     SD_CLK <= mc_H1; -- SD卡时钟
     mc_H6 <= mc_H9;
     mc_H8 <= mc_H9;
@@ -688,10 +690,10 @@ begin
     addr_load <= (GP_NWR and GP_NRD and addr_load) or GP_NCS; -- 地址加载控制
 
     -- SD Card Interface OE and Data (SD卡接口输出使能和数据)
-    SD_CMD <= mc_H8 when (not GP_NWR and GP_22 and not N_SDOUT) = '1' else 'Z';
-    SD_DAT(0) <= mc_H3 when (not GP_NWR and not GP_22 and not N_SDOUT) = '1' else 'Z';
-    SD_DAT(1) <= mc_H13 when (not GP_NWR and not GP_22 and not N_SDOUT) = '1' else 'Z';
-    SD_DAT(2) <= mc_H7 when (not GP_NWR and not GP_22 and not N_SDOUT) = '1' else 'Z';
-    SD_DAT(3) <= mc_H6 when (not GP_NWR and not GP_22 and not N_SDOUT) = '1' else 'Z';
+    SD_CMD <= mc_H8 when (not GP_NWR and GP_22 and not N_SDOUT_internal) = '1' else 'Z';
+    SD_DAT(0) <= mc_H3 when (not GP_NWR and not GP_22 and not N_SDOUT_internal) = '1' else 'Z';
+    SD_DAT(1) <= mc_H13 when (not GP_NWR and not GP_22 and not N_SDOUT_internal) = '1' else 'Z';
+    SD_DAT(2) <= mc_H7 when (not GP_NWR and not GP_22 and not N_SDOUT_internal) = '1' else 'Z';
+    SD_DAT(3) <= mc_H6 when (not GP_NWR and not GP_22 and not N_SDOUT_internal) = '1' else 'Z';
 
 end behavioral;
