@@ -114,7 +114,6 @@ architecture behavioral of superchis is
     signal address_load       : std_logic := '0';           -- Latched signal indicating address phase / 标志地址阶段的锁存信号
     signal address_load_sync  : std_logic := '0';           -- First stage sync (original: mc_H10) / 第一级同步
     signal address_load_sync2 : std_logic := '0';           -- Second stage sync (original: mc_H5) / 第二级同步
-    signal write_sync         : std_logic;                  -- Synchronized GP_NWR / 同步后的GP_NWR
     signal read_sync          : std_logic;                  -- Synchronized GP_NRD / 同步后的GP_NRD
     signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3) / 同步后的写使能逻辑
     signal gba_bus_idle_sync_d1       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
@@ -523,7 +522,6 @@ begin
     process(CLK50MHz)
     begin
         if rising_edge(CLK50MHz) then
-            write_sync <= GP_NWR;
             read_sync  <= GP_NRD;
             
             -- Address load synchronization chain (original: mc_H10 -> mc_H5)
