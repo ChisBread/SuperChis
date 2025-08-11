@@ -290,8 +290,9 @@ begin
                 or (GP_20 and not mc_A5 and not mc_B5 and not mc_B6 and mc_B9)
                 or (not mc_A5 and mc_B3 and not mc_B9)
                 or (mc_A5 and mc_B3 and mc_B9);
-            -- mc_B4: D FF, simplified from (A|B)&(A|C) to A|(B&C)
-            mc_B4 <= not((not mc_A5 or not mc_B5 or not mc_B6 or not N_DDR_SEL) or (icntr(8) and icntr(7)));
+            -- mc_B4: D FF
+            mc_B4 <= (not mc_A5 or not mc_B5 or not mc_B6 or not N_DDR_SEL or icntr(8))
+                and (not mc_A5 or not mc_B5 or not mc_B6 or not N_DDR_SEL or icntr(7));
             -- mc_B5: D FF (with XOR)
             mc_B5 <= ((not mc_A5 and not mc_B9 and icntr(8) and icntr(7))
                 or (mc_A5 and not mc_B5 and not mc_B6 and mc_B9 and mc_E3 and mc_H0)
@@ -497,8 +498,8 @@ begin
     begin
         if rising_edge(CLK50MHz) then
             mc_E3 <= GP_NWR or not WRITEENABLE;
-            -- DDR选择信号生成, simplified from (A|B)&(A|C) to A|(B&C)
-            N_DDR_SEL <= (GP_NCS or not MAP_REG) or (SDENABLE and GP_23);
+            -- DDR选择信号生成
+            N_DDR_SEL <= GP_NCS or not MAP_REG or (SDENABLE and GP_23);
         end if;
     end process;
 
