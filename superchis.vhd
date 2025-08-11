@@ -119,6 +119,7 @@ architecture behavioral of superchis is
     signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3) / 同步后的写使能逻辑
     signal gba_bus_idle_sync_d1       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
     signal gba_bus_idle_sync       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
+    signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
     
     -- SD Card Signals / SD卡信号
     signal sd_cmd_out         : std_logic := '1';           -- Data to be driven on the SD_CMD line / 驱动到SD_CMD线上的数据
@@ -132,6 +133,7 @@ architecture behavioral of superchis is
     signal sd_dat_toggle      : std_logic_vector(3 downto 0) := (others => '0');  -- D-FFs for DAT lines (original: mc_F0,F1,F14,F15) / DAT线的D触发器
     signal sd_cmd_toggle      : std_logic := '0';           -- D-FF for CMD line (original: mc_F7) / CMD线的D触发器
     signal sd_common_logic    : std_logic := '0';           -- Shared logic for some SD outputs (mc_H9) / 用于部分SD输出的共享逻辑
+    signal sd_data_out_final  : std_logic_vector(3 downto 0) := (others => '0'); -- Final SD data output latches (original: mc_H3, H13, H7, H6)
 
 begin
 
@@ -232,17 +234,16 @@ begin
     -- 地址加载控制锁存器。当GP_NCS为高（非活动）时，该锁存器保持'1'，允许加载新地址。
     address_load <= (GP_NWR and GP_NRD and address_load) or GP_NCS;
     
+    addr_clock <= (not GP_NCS and GP_NWR and GP_NRD) or 
+                    (GP_NCS and not GP_NRD) or 
+                    (GP_NCS and not GP_NWR);
     -- Internal address counter process.
     -- The clock is a composite signal derived from GBA control signals, as in the original design.
     -- 内部地址计数器进程。其时钟是GBA控制信号的组合，与原始设计一致。
     process(GP_NCS, GP_NWR, GP_NRD)
-        variable addr_clock : std_logic;
     begin
         -- Generate address counter clock (equivalent to mc_H11 in original)
         -- 为地址计数器生成时钟 (等效于原始设计的mc_H11)
-        addr_clock := (not GP_NCS and GP_NWR and GP_NRD) or 
-                     (GP_NCS and not GP_NRD) or 
-                     (GP_NCS and not GP_NWR);
         
         if rising_edge(addr_clock) then
             if address_load = '1' then
@@ -823,6 +824,27 @@ begin
     -- 根据 original_report.html 修正SD数据输出逻辑。
     -- 每条SD线都由其对应的状态触发器驱动。
     sd_data_out <= sd_dat_state;
+
+    -- Final SD Data Output Stage (Clocked by CLK50MHz)
+    -- This stage replicates the final output registers (mc_H*) from the original design,
+    -- which are clocked on the faster 50MHz clock, providing a final layer of synchronization
+    -- and implementing the last piece of the complex output logic.
+    -- 最终SD数据输出级 (由CLK50MHz驱动)
+    -- 此阶段复制了原始设计中的最终输出寄存器(mc_H*)，
+    -- 它们由更快的50MHz时钟驱动，提供了最后一层同步，并实现了复杂的输出逻辑的最后一部分。
+    process(CLK50MHz)
+    begin
+        if rising_edge(CLK50MHz) then
+            -- mc_H3 -> SD_DAT(0)
+            sd_data_out_final(0) <= (not GP_22 and sd_dat_state(1)) or (GP_22 and sd_dat_state(2));
+            -- mc_H13 -> SD_DAT(1)
+            sd_data_out_final(1) <= (not GP_22 and sd_dat_state(0)) or (GP_22 and sd_dat_state(3));
+            -- mc_H7 -> SD_DAT(2)
+            sd_data_out_final(2) <= (not GP_22 and sd_dat_state(3)) or (GP_22 and sd_dat_state(0));
+            -- mc_H6 -> SD_DAT(3)
+            sd_data_out_final(3) <= sd_common_logic;
+        end if;
+    end process;
     
     -- SD线路输出使能控制：决定何时CPLD驱动SD线路
     -- Output enable logic for SD lines.
@@ -841,7 +863,7 @@ begin
     -- - 这种设计让同一组物理线路既能发送也能接收，实现全双工通信
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
     gen_sd_dat: for i in 0 to 3 generate
-        SD_DAT(i) <= sd_data_out(i) when sd_data_oe(i) = '1' else 'Z';
+        SD_DAT(i) <= sd_data_out_final(i) when sd_data_oe(i) = '1' else 'Z';
     end generate;
 
 end behavioral;
