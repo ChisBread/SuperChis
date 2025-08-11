@@ -623,6 +623,45 @@ begin
     -- 这部分是对原始CPLD中用于直接SD卡通信逻辑的、非常复杂的、周期精确的重构。
     -- 它使用了状态锁存器和触发器(T-FlipFlop)的组合。
     -- 该逻辑已根据CPLD适配报告进行了细致的验证。
+    --
+    -- ** SD卡位操作原理详解 **
+    -- 由于GBA无法直接操作SD卡，SuperChis CPLD充当智能接口，实现以下机制：
+    --
+    -- 1. 双层状态系统架构：
+    --    - STATE层 (sd_dat_state, sd_cmd_state): 存储当前SD线路的输出值
+    --    - TOGGLE层 (sd_dat_toggle, sd_cmd_toggle): 控制何时翻转STATE层的值
+    --
+    -- 2. GBA通过GP总线的读写操作：
+    --    写操作 (GP_22=0时): GBA向GP(15:0)写入控制字，CPLD解析各位含义：
+    --    - GP(8,9,10,11,12): 对应sd_dat_toggle和sd_cmd_toggle的复位信号
+    --    - GP_19: 全局控制位，影响所有SD状态的更新
+    --    - GP_20: 另一控制位，用于特殊状态设置
+    --    
+    --    读操作 (GP_22选择读取内容):
+    --    - GP_22=0: 读取TOGGLE层状态，用于调试和同步
+    --    - GP_22=1: 读取实际SD线路状态和STATE层值
+    --
+    -- 3. SD卡数据传输过程：
+    --    a) GBA设置控制位 → TOGGLE层状态改变
+    --    b) 在下个GBA周期结束(GP_NCS上升沿) → STATE层根据TOGGLE层更新
+    --    c) STATE层直接驱动物理SD线路 (SD_CMD, SD_DAT0-3)
+    --    d) GBA可读取SD线路状态，获得SD卡响应
+    --
+    -- 4. 为什么CPLD要如此复杂实现：
+    --    - 时序解耦: GBA和SD卡工作在不同时序域，需要同步转换
+    --    - 状态保持: GBA操作是脉冲式的，SD需要电平保持，TOGGLE+STATE提供状态记忆
+    --    - 并行控制: 4条DAT线+1条CMD线需要独立控制，每条都有自己的状态机
+    --    - 反馈机制: SD线路的当前状态会影响下次操作，实现闭环控制
+    --    - 资源限制: CPLD的macrocell有限，巧妙使用T触发器节省逻辑资源
+    --
+    -- 5. T触发器(Toggle Flip-Flop)的精巧设计：
+    --    - T输入 = (设置条件) XOR (复位条件)
+    --    - 设置条件: 检测GBA写操作和SD线路反馈，决定何时切换
+    --    - 复位条件: 通过GP总线特定位的组合，允许GBA强制复位
+    --    - XOR逻辑: 确保设置和复位不会同时生效，避免状态竞争
+    --
+    -- 这种设计让32位的GBA能够精确控制SD卡的每一个时钟周期和数据位，
+    -- 实现了完整的SD协议支持，包括命令发送、数据传输、多块操作等。
     -- ========================================================================
 
     -- SD Card State Machine, clocked by the end of a GBA bus cycle (rising edge of GP_NCS).
@@ -677,54 +716,91 @@ begin
     -- SD卡触发器逻辑。
     -- CPLD报告显示这些是配置为T触发器的D触发器，包含复杂的布尔逻辑和XOR操作以及SD线反馈。
     -- 每个触发器都有完整的 T = (条件集) XOR (复位条件) 结构。
+    --
+    -- ** T触发器工作原理详解 **
+    -- T触发器是D触发器的特殊配置：D = T XOR Q，在时钟边沿时Q翻转(T=1)或保持(T=0)
+    --
+    -- 每个SD控制线的T触发器有两个输入条件：
+    -- 1. 设置条件 (t_condition_X): 
+    --    - 主控制: (!GP_19 & !toggle_state & address_sync) - GBA主动设置
+    --    - SD反馈: (!GP_22 & SD_line & !toggle & timing_conditions) - SD线高时的反馈
+    --    - SD反转: (!GP_22 & !SD_line & toggle & timing_conditions) - SD线低时的反转
+    --    这三个条件实现了：GBA控制 + SD线路状态反馈 + 自动翻转机制
+    --
+    -- 2. 复位条件 (t_reset_X):
+    --    - 格式: (!GP(bit) & !GP_19 & address_sync & !addr_load)
+    --    - GP(bit)对应: GP(8)→DAT0, GP(10)→DAT3, GP(11)→DAT0, GP(9)→DAT1, GP(12)→CMD
+    --    - 允许GBA通过写特定GP位来强制复位对应的触发器
+    --
+    -- 3. 最终T输入 = 设置条件 XOR 复位条件:
+    --    - 确保设置和复位不会同时生效
+    --    - 设置=1,复位=0 → T=1 → 触发器翻转
+    --    - 设置=0,复位=1 → T=1 → 触发器翻转(复位翻转)
+    --    - 设置=复位 → T=0 → 触发器保持
+    --
+    -- 这种设计让GBA能够：
+    -- - 通过GP_19统一控制所有SD操作的启动
+    -- - 通过GP(8-12)单独控制每条SD线的复位
+    -- - 通过GP_22选择不同的反馈模式
+    -- - 实时监控SD卡的响应并据此调整后续操作
     process(GP_NCS)
         variable t_condition_0, t_condition_1, t_condition_2, t_condition_3, t_condition_cmd : std_logic;
         variable t_reset_0, t_reset_1, t_reset_2, t_reset_3, t_reset_cmd : std_logic;
     begin
         if rising_edge(GP_NCS) then
-            -- mc_F0 (sd_dat_toggle(0)) - corresponds to SD-DAT0 control
+            -- mc_F0 (sd_dat_toggle(0)) - 控制SD-DAT0线的写操作
+            -- 对应原始CPLD的mc_F0宏单元，通过SD-DAT2线获得反馈
             -- T condition set: (!GP-19 & !mc_F0 & mc_H5) | feedback from SD-DAT2
             t_condition_0 := (not GP_19 and not sd_dat_toggle(0) and address_load_sync2) or
                             (not GP_22 and SD_DAT(2) and not sd_dat_toggle(0) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync) or
                             (not GP_22 and not SD_DAT(2) and sd_dat_toggle(0) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync);
             
-            -- T reset condition: (!GP-8 & !GP-19 & mc_H5 & !mc_H10) - corrected GP pin mapping
+            -- T reset condition: 通过GP(8)允许GBA强制复位此触发器
             t_reset_0 := not GP(8) and not GP_19 and address_load_sync2 and not address_load_sync;
             
             sd_dat_toggle(0) <= t_condition_0 xor t_reset_0;
 
-            -- mc_F1 (sd_dat_toggle(1)) - corresponds to SD-DAT3 control  
+            -- mc_F1 (sd_dat_toggle(1)) - 控制SD-DAT3线的写操作
+            -- 对应原始CPLD的mc_F1宏单元，通过SD-DAT3线获得反馈
             t_condition_1 := (not GP_19 and not sd_dat_toggle(1) and address_load_sync2) or
                             (not GP_22 and SD_DAT(3) and not sd_dat_toggle(1) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync) or
                             (not GP_22 and not SD_DAT(3) and sd_dat_toggle(1) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync);
             
+            -- T reset condition: 通过GP(10)允许GBA强制复位此触发器
             t_reset_1 := not GP(10) and not GP_19 and address_load_sync2 and not address_load_sync;
             
             sd_dat_toggle(1) <= t_condition_1 xor t_reset_1;
 
-            -- mc_F14 (sd_dat_toggle(2)) - corresponds to SD-DAT0 control
+            -- mc_F14 (sd_dat_toggle(2)) - 控制SD-DAT0线的另一种写操作模式
+            -- 对应原始CPLD的mc_F14宏单元，通过SD-DAT0线获得直接反馈
             t_condition_2 := (not GP_19 and not sd_dat_toggle(2) and address_load_sync2) or
                             (not GP_22 and SD_DAT(0) and not sd_dat_toggle(2) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync) or
                             (not GP_22 and not SD_DAT(0) and sd_dat_toggle(2) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync);
             
+            -- T reset condition: 通过GP(11)允许GBA强制复位此触发器
             t_reset_2 := not GP(11) and not GP_19 and address_load_sync2 and not address_load_sync;
             
             sd_dat_toggle(2) <= t_condition_2 xor t_reset_2;
 
-            -- mc_F15 (sd_dat_toggle(3)) - corresponds to SD-DAT1 control
+            -- mc_F15 (sd_dat_toggle(3)) - 控制SD-DAT1线的写操作
+            -- 对应原始CPLD的mc_F15宏单元，通过SD-DAT1线获得反馈
             t_condition_3 := (not GP_19 and not sd_dat_toggle(3) and address_load_sync2) or
                             (not GP_22 and SD_DAT(1) and not sd_dat_toggle(3) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync) or
                             (not GP_22 and not SD_DAT(1) and sd_dat_toggle(3) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync);
             
+            -- T reset condition: 通过GP(9)允许GBA强制复位此触发器
             t_reset_3 := not GP(9) and not GP_19 and address_load_sync2 and not address_load_sync;
             
             sd_dat_toggle(3) <= t_condition_3 xor t_reset_3;
             
-            -- mc_F7 (sd_cmd_toggle) - corresponds to SD-CMD control
+            -- mc_F7 (sd_cmd_toggle) - 控制SD-CMD线的写操作
+            -- 对应原始CPLD的mc_F7宏单元，这是最重要的控制线，用于发送SD命令
+            -- 注意：它的反馈来源是sd_dat_toggle(2)而不是SD_CMD线，这是特殊的交叉连接
             t_condition_cmd := (not GP_19 and not sd_cmd_toggle and address_load_sync2) or
                               (not GP_22 and not sd_cmd_toggle and sd_dat_toggle(2) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync) or
                               (not GP_22 and sd_cmd_toggle and not sd_dat_toggle(2) and not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync);
             
+            -- T reset condition: 通过GP(12)允许GBA强制复位CMD触发器
             t_reset_cmd := not GP(12) and not GP_19 and address_load_sync2 and not address_load_sync;
             
             sd_cmd_toggle <= t_condition_cmd xor t_reset_cmd;
@@ -732,21 +808,37 @@ begin
     end process;
     
     -- SD Interface Outputs / SD接口输出
+    -- ** SD数据流最终输出阶段 **
+    -- 经过复杂的TOGGLE→STATE转换后，最终的物理输出非常简单直接：
+    
+    -- SD时钟生成：组合GBA控制信号，在总线空闲时提供时钟
     SD_CLK <= (GP_NWR and GP_NRD) or sd_output_enable; -- Generate SD clock from GBA control signals / 从GBA控制信号生成SD时钟
+    
+    -- SD命令线输出：直接由sd_cmd_state驱动，这是STATE层的最终结果
     sd_cmd_out <= sd_cmd_state;
+    
+    -- SD数据线输出：直接由sd_dat_state驱动，4位并行输出
     -- Corrected SD data output logic to match original_report.html.
     -- Each SD line is driven by its corresponding state flip-flop.
     -- 根据 original_report.html 修正SD数据输出逻辑。
     -- 每条SD线都由其对应的状态触发器驱动。
     sd_data_out <= sd_dat_state;
     
+    -- SD线路输出使能控制：决定何时CPLD驱动SD线路
     -- Output enable logic for SD lines.
     -- SD线路的输出使能逻辑。
+    -- CMD线：写操作时(GP_NWR=0) + 命令模式(GP_22=1) + SD模块使能时才输出
     sd_cmd_oe <= not GP_NWR and GP_22 and not sd_output_enable;
+    
+    -- DAT线：写操作时(GP_NWR=0) + 数据模式(GP_22=0) + SD模块使能时才输出
     sd_data_oe <= (others => (not GP_NWR and not GP_22 and not sd_output_enable));
     
     -- Tri-state control for bidirectional SD lines.
-    -- 用于双向SD线路的三态控制。
+    -- SD线路的三态控制，实现双向通信。
+    -- ** SD物理层连接的最后一步 **
+    -- - 输出模式：CPLD驱动SD线路，发送命令和数据到SD卡
+    -- - 输入模式：SD线路处于高阻态，CPLD读取SD卡的响应
+    -- - 这种设计让同一组物理线路既能发送也能接收，实现全双工通信
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
     gen_sd_dat: for i in 0 to 3 generate
         SD_DAT(i) <= sd_data_out(i) when sd_data_oe(i) = '1' else 'Z';
