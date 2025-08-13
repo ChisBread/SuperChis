@@ -232,17 +232,20 @@ begin
     -- 地址加载控制锁存器。当GP_NCS为高（非活动）时，该锁存器保持'1'，允许加载新地址。
     address_load <= (GP_NWR and GP_NRD and address_load) or GP_NCS;
     
+    -- Generate address counter clock (equivalent to mc_H11 in original CPLD report)
+    -- mc_H11 = !GP_NCS & GP_NWR & GP_NRD | GP_NCS & !GP_NRD | GP_NCS & !GP_NWR
+    -- This creates clock edges for both address loading and auto-increment
+    -- 为地址计数器生成时钟 (等效于原始CPLD报告的mc_H11)
+    -- 这为地址加载和自动递增都创建时钟边沿
     addr_clock <= (not GP_NCS and GP_NWR and GP_NRD) or 
-                    (GP_NCS and not GP_NRD) or 
-                    (GP_NCS and not GP_NWR);
+                  (GP_NCS and not GP_NRD) or 
+                  (GP_NCS and not GP_NWR);
+    
     -- Internal address counter process.
     -- The clock is a composite signal derived from GBA control signals, as in the original design.
     -- 内部地址计数器进程。其时钟是GBA控制信号的组合，与原始设计一致。
-    process(GP_NCS, GP_NWR, GP_NRD, addr_clock)
+    process(addr_clock)
     begin
-        -- Generate address counter clock (equivalent to mc_H11 in original)
-        -- 为地址计数器生成时钟 (等效于原始设计的mc_H11)
-        
         if rising_edge(addr_clock) then
             if address_load = '1' then
                 -- Load address from GBA data bus
@@ -258,21 +261,17 @@ begin
 
     -- ========================================================================
     -- Flash Address Generation / Flash地址生成
-    -- Implements the complex, non-standard banking logic from the original CPLD.
-    -- 实现源自原始CPLD的、复杂的、非标准的Bank切换逻辑。
+    -- Implements complex banking logic from original CPLD
+    -- 实现源自原始CPLD的复杂Bank切换逻辑
     -- ========================================================================
     
     process(internal_address, config_bank_select, current_mode, config_write_enable)
     begin
         if current_mode = MODE_FLASH then
-            -- This block is a direct, bit-by-bit implementation based on the CPLD report (original_report.html).
-            -- It combines the address scrambling and banking logic as defined by the original hardware macrocells.
-            -- 本代码块是基于CPLD报告(original_report.html)的逐位直接实现。
-            -- 它整合了原始硬件宏单元所定义的地址重映射与Bank选择逻辑。
+            -- Direct implementation based on CPLD report address scrambling and banking
+            -- 基于CPLD报告的地址重映射与Bank选择的直接实现
 
-            -- Direct Scrambling (based on report's iaddr-aX to FLASH-AX mapping)
-            -- 直接重映射部分
-            -- Correct mapping: FLASH-A0←iaddr-a7, FLASH-A2←iaddr-a6, FLASH-A4←iaddr-a0, FLASH-A5←iaddr-a2, FLASH-A8←iaddr-a3
+            -- Direct Scrambling / 直接重映射
             flash_address(0)  <= internal_address(7);  -- FLASH-A0 = iaddr-a7
             flash_address(2)  <= internal_address(6);  -- FLASH-A2 = iaddr-a6
             flash_address(4)  <= internal_address(0);  -- FLASH-A4 = iaddr-a0
@@ -305,34 +304,32 @@ begin
     
     FLASH_A <= flash_address;
     
-    -- SRAM A16 is directly controlled by the general write enable config bit for simple banking.
-    -- SRAM A16由通用写使能配置位直接控制，用于实现简单的Bank切换。
+    -- SRAM A16 is controlled by write enable config bit for banking
+    -- SRAM A16由写使能配置位控制，用于Bank切换
     SRAM_A16 <= config_write_enable;
 
     -- ========================================================================
     -- DDR SDRAM Controller / DDR SDRAM 控制器
-    -- A simple state machine to handle basic DDR commands.
-    -- NOTE: The refresh logic is clocked by GP_NCS, which is not ideal but
-    -- is a faithful reconstruction of the original, potentially flawed design.
-    -- 一个用于处理基本DDR命令的简单状态机。
-    -- 注意: 刷新逻辑由GP_NCS驱动，这并不理想，但这是对原始设计（可能存在缺陷）的忠实重构。
+    -- Simple state machine for basic DDR commands
+    -- NOTE: Refresh logic clocked by GP_NCS (faithful to original design)
+    -- 用于基本DDR命令的简单状态机
+    -- 注意: 刷新逻辑由GP_NCS驱动（忠实于原始设计）
     -- ========================================================================
     
-    -- DDR State Machine, clocked by the rising edge of GP_NCS (when a GBA cycle ends).
-    -- DDR状态机，由GP_NCS上升沿（GBA总线周期结束时）驱动。
+    -- DDR State Machine, clocked by GP_NCS rising edge
+    -- DDR状态机，由GP_NCS上升沿驱动
     process(GP_NCS)
     begin
         if rising_edge(GP_NCS) then
             case ddr_state is
                 when DDR_IDLE =>
                     ddr_counter <= (others => '0');
-                    -- A DDR operation can start if the bus is idle (no read/write).
-                    -- 如果总线空闲（无读写），则可以开始DDR操作。
+                    -- Start DDR operation if bus idle and in DDR mode
+                    -- 如果总线空闲且处于DDR模式则开始DDR操作
                     if current_mode = MODE_DDR and 
                        write_enable_sync = '1' and read_sync = '1' then
                         ddr_state <= DDR_ACTIVATE;
-                    -- Trigger a refresh cycle if the refresh counter overflows.
-                    -- 如果刷新计数器溢出，则触发刷新周期。
+                    -- Trigger refresh if counter overflows / 计数器溢出时触发刷新
                     elsif ddr_refresh_counter(8) = '1' then
                         ddr_state <= DDR_REFRESH;
                     end if;
@@ -503,7 +500,7 @@ begin
     -- The clk3 dependency is unusual but faithful to the original.
     -- FLASH_NCE在以下情况使能: GP_NCS有效, 非DDR模式, 且非SD模式(或GP_23为低)。
     -- 对clk3的依赖不寻常，但忠于原始设计。
-    FLASH_NCE <= (GP_NCS or clk3 or config_map_reg) or (config_sd_enable and GP_23);
+    FLASH_NCE <= GP_NCS or clk3 or config_map_reg or (config_sd_enable and GP_23);
 
     -- N_SDOUT (SD I/O block enable) is enabled when: GP_NCS is active, SD mode is enabled, and GP_23 is high.
     -- It is disabled at the magic address to prevent conflicts.
@@ -554,16 +551,10 @@ begin
     -- GP总线仅在GBA读周期(GP_NRD='0')且SD I/O模块激活时才由本芯片驱动。
     gp_output_enable <= '1' when (GP_NRD = '0' and sd_output_enable = '0') else '0';
     
-    -- GP Bus Data Multiplexing (Exact implementation matching original CPLD boolean equations)
-    -- GP总线数据复用 (完全匹配原始CPLD布尔方程的精确实现)
-    --
-    -- ** 基于original_report.html的精确布尔方程重构 **
-    -- 每个GP位的逻辑都严格按照原始CPLD报告中的布尔方程实现，确保与驱动完全兼容
-    --
-    -- 关键发现：
-    -- - GP-0 = !GP-22 & mc_F7 | GP-22 & SD-CMD  (驱动在SC_RDWR_COMMAND中检查bit 0)
-    -- - GP-8 = clk3 & GP-22 | !GP-22 & SD-DAT0  (驱动在SC_WRITE_REGISTER_8中检查bit 8) 
-    -- - 所有宏单元(mc_XX)对应我们的内部信号：mc_F7=sd_cmd_toggle, mc_F0=sd_dat_toggle(2)等
+    -- GP Bus Data Multiplexing (matching original CPLD boolean equations)
+    -- GP总线数据复用 (匹配原始CPLD布尔方程)
+    -- GP_22 selects mode: 0=debug/toggle states, 1=data transmission
+    -- GP_22选择模式：0=调试/触发器状态，1=数据传输
     process(GP_22, sd_cmd_toggle, SD_CMD, sd_dat_toggle, sd_cmd_state, sd_dat_state, 
             clk3, SD_DAT, sd_common_logic)
         -- Local aliases for better readability / 本地别名，提高可读性
@@ -571,8 +562,7 @@ begin
         alias data_mode     : std_logic is GP_22;      -- GP_22=1: Data transmission mode
     begin
         -- GP总线数据复用：基于GP_22地址位选择调试模式或数据传输模式
-        -- 调试模式(GP_22=0): 读取内部状态和触发器，用于调试和同步
-        -- 数据传输模式(GP_22=1): 读取实际SD线路状态，用于数据通信
+        -- GP bus data mux: GP_22 selects debug mode or data transmission mode
         
         if debug_mode = '1' then
             -- Debug Mode (GP_22=0): Read internal toggle states and control signals
@@ -585,10 +575,10 @@ begin
             gp_output_data(5)  <= sd_dat_state(2);      -- DAT2 line state
             gp_output_data(6)  <= sd_dat_state(0);      -- DAT0 line state
             gp_output_data(7)  <= sd_dat_state(3);      -- DAT3 line state
-            gp_output_data(8)  <= SD_DAT(0);            -- Raw SD-DAT0 input (关键位!)
+            gp_output_data(8)  <= SD_DAT(0);            -- Raw SD-DAT0 input (key bit!)
             gp_output_data(9)  <= SD_DAT(1);            -- Raw SD-DAT1 input
-            gp_output_data(10) <= SD_DAT(2);            -- Raw SD-DAT2 input (always high in debug)
-            gp_output_data(11) <= SD_DAT(3);            -- Raw SD-DAT3 input (always high in debug)
+            gp_output_data(10) <= SD_DAT(2);            -- Raw SD-DAT2 input
+            gp_output_data(11) <= SD_DAT(3);            -- Raw SD-DAT3 input
             gp_output_data(12) <= sd_dat_toggle(2);     -- Additional toggle state
             gp_output_data(13) <= sd_dat_toggle(3);     -- Additional toggle state
             gp_output_data(14) <= sd_dat_toggle(2);     -- Duplicate for compatibility
@@ -604,7 +594,7 @@ begin
             gp_output_data(5)  <= sd_dat_state(3);      -- Processed DAT3 state
             gp_output_data(6)  <= sd_data_out(1);       -- SD-DAT1 output driver
             gp_output_data(7)  <= sd_data_out(2);       -- SD-DAT2 output driver
-            gp_output_data(8)  <= clk3;                 -- Clock signal (关键位!)
+            gp_output_data(8)  <= clk3;                 -- Clock signal (key bit!)
             gp_output_data(9)  <= '0';                  -- Fixed low in data mode
             gp_output_data(10) <= '1';                  -- Fixed high in data mode
             gp_output_data(11) <= '1';                  -- Fixed high in data mode
@@ -621,63 +611,21 @@ begin
 
     -- ========================================================================
     -- SD Card Interface (Low-Level Bit-Banging Logic) / SD卡接口 (底层位操作逻辑)
-    -- This section is a very complex, cycle-accurate reconstruction of the
-    -- original CPLD's logic for direct SD card communication. It uses a
-    -- combination of state latches and toggle flip-flops.
-    -- This logic has been meticulously verified against the CPLD fitter report.
-    -- 这部分是对原始CPLD中用于直接SD卡通信逻辑的、非常复杂的、周期精确的重构。
-    -- 它使用了状态锁存器和触发器(T-FlipFlop)的组合。
-    -- 该逻辑已根据CPLD适配报告进行了细致的验证。
-    --
-    -- ** SD卡位操作原理详解 **
-    -- 由于GBA无法直接操作SD卡，SuperChis CPLD充当智能接口，实现以下机制：
-    --
-    -- 1. 双层状态系统架构：
-    --    - STATE层 (sd_dat_state, sd_cmd_state): 存储当前SD线路的输出值
-    --    - TOGGLE层 (sd_dat_toggle, sd_cmd_toggle): 控制何时翻转STATE层的值
-    --
-    -- 2. GBA通过GP总线的读写操作：
-    --    写操作 (GP_22=0时): GBA向GP(15:0)写入控制字，CPLD解析各位含义：
-    --    - GP(8,9,10,11,12): 对应sd_dat_toggle和sd_cmd_toggle的复位信号
-    --    - GP_19: 全局控制位，影响所有SD状态的更新
-    --    - GP_20: 另一控制位，用于特殊状态设置
-    --    
-    --    读操作 (GP_22选择读取内容):
-    --    - GP_22=0: 读取TOGGLE层状态，用于调试和同步
-    --    - GP_22=1: 读取实际SD线路状态和STATE层值
-    --
-    -- 3. SD卡数据传输过程：
-    --    a) GBA设置控制位 → TOGGLE层状态改变
-    --    b) 在下个GBA周期结束(GP_NCS上升沿) → STATE层根据TOGGLE层更新
-    --    c) STATE层直接驱动物理SD线路 (SD_CMD, SD_DAT0-3)
-    --    d) GBA可读取SD线路状态，获得SD卡响应
-    --
-    -- 4. 为什么CPLD要如此复杂实现：
-    --    - 时序解耦: GBA和SD卡工作在不同时序域，需要同步转换
-    --    - 状态保持: GBA操作是脉冲式的，SD需要电平保持，TOGGLE+STATE提供状态记忆
-    --    - 并行控制: 4条DAT线+1条CMD线需要独立控制，每条都有自己的状态机
-    --    - 反馈机制: SD线路的当前状态会影响下次操作，实现闭环控制
-    --    - 资源限制: CPLD的macrocell有限，巧妙使用T触发器节省逻辑资源
-    --
-    -- 5. T触发器(Toggle Flip-Flop)的精巧设计：
-    --    - T输入 = (设置条件) XOR (复位条件)
-    --    - 设置条件: 检测GBA写操作和SD线路反馈，决定何时切换
-    --    - 复位条件: 通过GP总线特定位的组合，允许GBA强制复位
-    --    - XOR逻辑: 确保设置和复位不会同时生效，避免状态竞争
-    --
-    -- 这种设计让32位的GBA能够精确控制SD卡的每一个时钟周期和数据位，
-    -- 实现了完整的SD协议支持，包括命令发送、数据传输、多块操作等。
+    -- Complex reconstruction of original CPLD's SD communication logic using
+    -- state latches and toggle flip-flops. Verified against CPLD fitter report.
+    -- 对原始CPLD的SD通信逻辑的复杂重构，使用状态锁存器和触发器。
+    -- 
+    -- Architecture / 架构:
+    -- - STATE layer: Stores current SD line output values / 存储当前SD线路输出值
+    -- - TOGGLE layer: Controls when to flip STATE values / 控制何时翻转STATE值
+    -- - GP_22 selects read mode: 0=debug/toggle states, 1=SD line states
+    -- - GP_19/20: Global control bits, GP(8-12): Individual reset bits
     -- ========================================================================
 
-    -- SD Card State Machine, clocked by the end of a GBA bus cycle (rising edge of GP_NCS).
-    -- The logic for each state signal is a direct implementation of the boolean
-    -- equations from the CPLD fitter report's macrocells (mc_*) to ensure perfect accuracy.
-    -- Based on original CPLD report analysis:
-    -- State dependencies: mc_E13->mc_F5->mc_E0->mc_E2->mc_H3 (cmd->dat2->dat0->dat1->dat3)
-    -- SD卡状态机，由GBA总线周期结束时(GP_NCS上升沿)驱动。
-    -- 每个状态信号的逻辑都是对CPLD适配报告中宏单元(mc_*)布尔方程的直接实现，以确保绝对精确。
-    -- 基于原始CPLD报告分析：
-    -- 状态依赖：mc_E13->mc_F5->mc_E0->mc_E2->mc_H3 (cmd->dat2->dat0->dat1->dat3)
+    -- SD Card State Machine, clocked by GP_NCS rising edge.
+    -- Direct implementation of CPLD fitter report boolean equations.
+    -- State dependencies: cmd->dat2->dat0->dat1->dat3
+    -- SD卡状态机，由GP_NCS上升沿驱动。CPLD适配报告布尔方程的直接实现。
     process(GP_NCS)
         -- Local signals for cleaner logic / 本地信号，使逻辑更清晰
         variable gba_enable_condition    : std_logic;  -- GBA主动使能条件
@@ -734,43 +682,12 @@ begin
     end process;
     
     -- SD Card Toggle Flip-Flop Logic.
-    -- The CPLD report shows these are D-FlipFlops configured as T-FlipFlops,
-    -- with complex boolean logic including XOR operations and SD line feedback.
-    -- Each toggle FF has a complete T = (condition_set) XOR (reset_condition) structure.
-    -- SD卡触发器逻辑。
-    -- CPLD报告显示这些是配置为T触发器的D触发器，包含复杂的布尔逻辑和XOR操作以及SD线反馈。
-    -- 每个触发器都有完整的 T = (条件集) XOR (复位条件) 结构。
-    --
-    -- ** T触发器工作原理详解 **
-    -- T触发器是D触发器的特殊配置：D = T XOR Q，在时钟边沿时Q翻转(T=1)或保持(T=0)
-    --
-    -- 每个SD控制线的T触发器有两个输入条件：
-    -- 1. 设置条件 (t_condition_X): 
-    --    - 主控制: (!GP_19 & !toggle_state & address_sync) - GBA主动设置
-    --    - SD反馈: (!GP_22 & SD_line & !toggle & timing_conditions) - SD线高时的反馈
-    --    - SD反转: (!GP_22 & !SD_line & toggle & timing_conditions) - SD线低时的反转
-    --    这三个条件实现了：GBA控制 + SD线路状态反馈 + 自动翻转机制
-    --
-    -- 2. 复位条件 (t_reset_X):
-    --    - 格式: (!GP(bit) & !GP_19 & address_sync & !addr_load)
-    --    - GP(bit)对应: GP(8)→DAT0, GP(10)→DAT3, GP(11)→DAT0, GP(9)→DAT1, GP(12)→CMD
-    --    - 允许GBA通过写特定GP位来强制复位对应的触发器
-    --
-    -- 3. 最终T输入 = 设置条件 XOR 复位条件:
-    --    - 确保设置和复位不会同时生效
-    --    - 设置=1,复位=0 → T=1 → 触发器翻转
-    --    - 设置=0,复位=1 → T=1 → 触发器翻转(复位翻转)
-    --    - 设置=复位 → T=0 → 触发器保持
-    --
-    -- 这种设计让GBA能够：
-    -- - 通过GP_19统一控制所有SD操作的启动
-    -- - 通过GP(8-12)单独控制每条SD线的复位
-    -- - 通过GP_22选择不同的反馈模式
-    -- - 实时监控SD卡的响应并据此调整后续操作
+    -- T-FlipFlops with T = (condition_set) XOR (reset_condition) structure.
+    -- SD卡触发器逻辑。T触发器采用 T = (设置条件) XOR (复位条件) 结构。
     process(GP_NCS)
         -- Toggle condition calculation function / 触发器条件计算函数
-        -- This function encapsulates the common T-FF logic pattern used by all SD toggles
-        -- 该函数封装了所有SD触发器使用的通用T-FF逻辑模式
+        -- Encapsulates common T-FF logic pattern for all SD toggles
+        -- 封装所有SD触发器的通用T-FF逻辑模式
         function calc_toggle_condition(
             current_toggle : std_logic;
             feedback_line  : std_logic;
@@ -786,11 +703,11 @@ begin
             -- T Set Condition: GBA control OR SD line feedback OR SD line inversion
             -- T设置条件：GBA控制 或 SD线反馈 或 SD线反转
             t_set_condition := 
-                -- GBA主动控制：启动时设置触发器
+                -- GBA active control / GBA主动控制
                 (not GP_19 and not current_toggle and address_load_sync2) or
-                -- SD线高电平反馈：当SD线为高且触发器为低时激活
+                -- SD line high feedback / SD线高电平反馈
                 (not GP_22 and feedback_line and not current_toggle and timing_active) or
-                -- SD线低电平反转：当SD线为低且触发器为高时激活
+                -- SD line low inversion / SD线低电平反转
                 (not GP_22 and not feedback_line and current_toggle and timing_active);
             
             -- T Reset Condition: GBA forced reset via specific GP bit
@@ -805,30 +722,24 @@ begin
     begin
         if rising_edge(GP_NCS) then
             -- SD DAT Toggle Flip-Flops / SD DAT触发器
-            -- Each DAT line has its own toggle FF with specific feedback connections
+            -- Each DAT line has its own toggle FF with specific feedback
             -- 每条DAT线都有自己的触发器，具有特定的反馈连接
             
-            -- mc_F0: sd_dat_toggle(0) - Controls SD-DAT0 write operations
-            -- 控制SD-DAT0写操作，通过SD-DAT2线获得反馈
+            -- Controls SD-DAT0 write via SD-DAT2 feedback / 通过SD-DAT2反馈控制SD-DAT0写操作
             sd_dat_toggle(0) <= calc_toggle_condition(sd_dat_toggle(0), SD_DAT(2), GP(8));
 
-            -- mc_F1: sd_dat_toggle(1) - Controls SD-DAT3 write operations  
-            -- 控制SD-DAT3写操作，通过SD-DAT3线获得反馈
+            -- Controls SD-DAT3 write via SD-DAT3 feedback / 通过SD-DAT3反馈控制SD-DAT3写操作 
             sd_dat_toggle(1) <= calc_toggle_condition(sd_dat_toggle(1), SD_DAT(3), GP(10));
 
-            -- mc_F14: sd_dat_toggle(2) - Controls SD-DAT0 alternate write mode
-            -- 控制SD-DAT0的另一种写操作模式，通过SD-DAT0线获得直接反馈
+            -- Controls SD-DAT0 alternate mode via SD-DAT0 feedback / 通过SD-DAT0反馈控制SD-DAT0替代模式
             sd_dat_toggle(2) <= calc_toggle_condition(sd_dat_toggle(2), SD_DAT(0), GP(11));
 
-            -- mc_F15: sd_dat_toggle(3) - Controls SD-DAT1 write operations
-            -- 控制SD-DAT1写操作，通过SD-DAT1线获得反馈
+            -- Controls SD-DAT1 write via SD-DAT1 feedback / 通过SD-DAT1反馈控制SD-DAT1写操作
             sd_dat_toggle(3) <= calc_toggle_condition(sd_dat_toggle(3), SD_DAT(1), GP(9));
             
             -- SD CMD Toggle Flip-Flop / SD CMD触发器
-            -- mc_F7: sd_cmd_toggle - Controls SD-CMD line write operations
-            -- 控制SD-CMD线写操作，这是最重要的控制线，用于发送SD命令
-            -- Special case: Uses sd_dat_toggle(2) as feedback instead of SD_CMD line
-            -- 特殊情况：使用sd_dat_toggle(2)作为反馈，而不是SD_CMD线
+            -- Controls SD-CMD line, uses sd_dat_toggle(2) as feedback
+            -- 控制SD-CMD线，使用sd_dat_toggle(2)作为反馈
             sd_cmd_toggle <= calc_toggle_condition(sd_cmd_toggle, sd_dat_toggle(2), GP(12));
         end if;
     end process;
@@ -836,39 +747,30 @@ begin
     -- ========================================================================
     -- SD Interface Outputs / SD接口输出
     -- ========================================================================
-    -- ** SD数据流最终输出阶段 **
-    -- 经过复杂的TOGGLE→STATE转换后，最终的物理输出非常简单直接：
-    --
-    -- 输出流程：TOGGLE触发器 → STATE状态机 → 组合逻辑 → 物理SD线路
-    -- Output flow: TOGGLE flip-flops → STATE machines → Combinational logic → Physical SD lines
+    -- Final output stage: TOGGLE→STATE→Combinational logic→Physical SD lines
+    -- 最终输出阶段：TOGGLE触发器→STATE状态机→组合逻辑→物理SD线路
     
     -- SD Clock Generation / SD时钟生成
-    -- Combines GBA control signals to provide clock when bus is idle
-    -- 组合GBA控制信号，在总线空闲时提供时钟
+    -- Provides clock when GBA bus is idle / 在GBA总线空闲时提供时钟
     SD_CLK <= (GP_NWR and GP_NRD) or sd_output_enable;
     
     -- SD Command Line Output / SD命令线输出
-    -- Directly driven by command state, which is the final result of STATE layer
-    -- 直接由命令状态驱动，这是STATE层的最终结果
+    -- Directly driven by command state / 直接由命令状态驱动
     sd_cmd_out <= sd_cmd_state;
     
     -- SD Data Lines Output / SD数据线输出
-    -- Driven by combinational logic of state registers per original CPLD report
-    -- 根据原始CPLD报告，直接由状态寄存器组合逻辑驱动
-    -- Each DAT line has GP_22-dependent routing for different operation modes
-    -- 每条DAT线都有依赖GP_22的路由，用于不同的操作模式
+    -- GP_22-dependent routing for different operation modes
+    -- GP_22相关路由，用于不同的操作模式
     process(GP_22, sd_dat_state, sd_common_logic)
     begin
         if GP_22 = '0' then
-            -- Data Mode (GP_22=0): Use specific state combinations for data transmission
-            -- 数据模式：使用特定的状态组合进行数据传输
-            sd_data_out(0) <= sd_dat_state(1);  -- mc_H3: DAT0 from DAT1 state
-            sd_data_out(1) <= sd_dat_state(0);  -- mc_H13: DAT1 from DAT0 state
-            sd_data_out(2) <= sd_dat_state(3);  -- mc_H7: DAT2 from DAT3 state
-            sd_data_out(3) <= sd_common_logic;  -- mc_H6: DAT3 from common logic
+            -- Data Mode: Use specific state combinations / 数据模式：使用特定状态组合
+            sd_data_out(0) <= sd_dat_state(1);  -- DAT0 from DAT1 state
+            sd_data_out(1) <= sd_dat_state(0);  -- DAT1 from DAT0 state
+            sd_data_out(2) <= sd_dat_state(3);  -- DAT2 from DAT3 state
+            sd_data_out(3) <= sd_common_logic;  -- DAT3 from common logic
         else
-            -- Command Mode (GP_22=1): Alternative state routing for command operations
-            -- 命令模式：用于命令操作的替代状态路由
+            -- Command Mode: Alternative state routing / 命令模式：替代状态路由
             sd_data_out(0) <= sd_dat_state(2);  -- DAT0 from DAT2 state  
             sd_data_out(1) <= sd_dat_state(3);  -- DAT1 from DAT3 state
             sd_data_out(2) <= sd_dat_state(0);  -- DAT2 from DAT0 state
@@ -877,29 +779,22 @@ begin
     end process;
     
     -- SD Output Enable Control / SD输出使能控制
-    -- Controls when CPLD drives SD lines vs when they're in high-impedance for reading
+    -- Controls when CPLD drives SD lines vs high-impedance for reading
     -- 控制何时CPLD驱动SD线路，何时处于高阻态进行读取
     
-    -- CMD Line Output Enable / CMD线输出使能
-    -- Active when: Writing (GP_NWR=0) AND Command mode (GP_22=1) AND SD module enabled
-    -- 激活条件：写操作(GP_NWR=0) 且 命令模式(GP_22=1) 且 SD模块使能
+    -- CMD Line: Writing AND Command mode AND SD enabled
+    -- CMD线：写操作 且 命令模式 且 SD使能
     sd_cmd_oe <= not GP_NWR and GP_22 and not sd_output_enable;
     
-    -- DAT Lines Output Enable / DAT线输出使能  
-    -- Active when: Writing (GP_NWR=0) AND Data mode (GP_22=0) AND SD module enabled
-    -- 激活条件：写操作(GP_NWR=0) 且 数据模式(GP_22=0) 且 SD模块使能
+    -- DAT Lines: Writing AND Data mode AND SD enabled  
+    -- DAT线：写操作 且 数据模式 且 SD使能
     sd_data_oe <= (others => (not GP_NWR and not GP_22 and not sd_output_enable));
     
     -- ========================================================================
     -- SD Physical Layer Connections / SD物理层连接
     -- ========================================================================
-    -- ** SD物理层连接的最后一步 **
-    -- Tri-state control for bidirectional SD lines implements full-duplex communication:
-    -- SD线路的三态控制实现全双工通信：
-    -- - Output Mode: CPLD drives SD lines, sending commands/data to SD card
-    -- - Input Mode: SD lines in high-impedance, CPLD reads SD card responses
-    -- - 输出模式：CPLD驱动SD线路，发送命令和数据到SD卡
-    -- - 输入模式：SD线路处于高阻态，CPLD读取SD卡的响应
+    -- Tri-state control for bidirectional SD lines
+    -- SD线路的三态控制实现全双工通信
     
     -- SD Command Line Tri-state / SD命令线三态控制
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
