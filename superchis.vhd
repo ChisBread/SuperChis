@@ -146,17 +146,11 @@ begin
         -- Default to Flash mode / 默认为Flash模式
         current_mode <= MODE_FLASH;
         
-        if config_sd_enable = '1' then
-            -- SD Card interface is enabled and takes priority.
-            -- SD卡接口已使能，并拥有最高优先级。
+        if config_sd_enable = '1' and GP_23 = '1' then
             current_mode <= MODE_SD;
         elsif config_map_reg = '1' then
-            -- SDRAM mode is selected.
-            -- 选择SDRAM模式。
             current_mode <= MODE_DDR;
         else
-            -- Default mode is Flash/SRAM access.
-            -- 默认为Flash/SRAM访问模式。
             current_mode <= MODE_FLASH;
         end if;
     end process;
