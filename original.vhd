@@ -354,7 +354,7 @@ begin
     -- 寄存器加载过程，在GP_NWR上升沿触发
     process(GP_NWR)
     begin
-        if rising_edge(GP_NWR) then
+        if falling_edge(GP_NWR) then
             if LOAD_IREG = '1' then
                 SDENABLE <= GP(1);
                 MAP_REG <= GP(0);
@@ -392,7 +392,7 @@ begin
 
     process(GP_NWR)
     begin
-        if rising_edge(GP_NWR) then
+        if falling_edge(GP_NWR) then
             if LOAD_IREG = '1' then
                 mc_C9 <= GP(4) and not GP(5) and GP(14);
                 mc_C10 <= GP(4) and not GP(8) and GP(12);
@@ -426,7 +426,7 @@ begin
 
     process(GP_NWR)
     begin
-        if rising_edge(GP_NWR) then
+        if falling_edge(GP_NWR) then
             if LOAD_IREG = '1' then
                 mc_D9 <= GP(7) and GP(9) and not GP(15);
             end if;
@@ -605,7 +605,7 @@ begin
 
     process(GP_NWR)
     begin
-        if rising_edge(GP_NWR) then
+        if falling_edge(GP_NWR) then
             mc_G1 <= not GP(0) and GP(1) and not GP(2) and GP(3) and GP(4) and not GP(5) and GP(6) and not GP(7) and GP(8) and not GP(9) and GP(10) and not GP(11) and mc_C13;
             mc_G2 <= not GP(0) and GP(1) and not GP(2) and GP(3) and GP(4) and not GP(5) and GP(6) and not GP(7) and GP(8) and not GP(9) and GP(10) and not GP(11) and MAGICADDR;
             if LOAD_IREG = '1' then

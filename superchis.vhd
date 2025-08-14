@@ -51,16 +51,6 @@ architecture behavioral of superchis is
     -- Type Definitions / 类型定义
     -- ========================================================================
     
-    -- DDR SDRAM State Machine / DDR SDRAM 状态机
-    type ddr_state_t is (
-        DDR_IDLE,       -- Idle state / 空闲状态
-        DDR_PRECHARGE,  -- Precharge command / 预充电
-        DDR_ACTIVATE,   -- Activate command (open a row) / 行激活
-        DDR_READ,       -- Read command / 读命令
-        DDR_WRITE,      -- Write command / 写命令
-        DDR_REFRESH     -- Refresh command / 刷新命令
-    );
-    
     -- Access Mode Types / 访问模式类型
     type access_mode_t is (
         MODE_FLASH,     -- Accessing Flash/SRAM / 访问闪存或SRAM
@@ -93,13 +83,20 @@ architecture behavioral of superchis is
     signal ddr_bank_address   : std_logic_vector(1 downto 0);    -- Bank address for DDR SDRAM / DDR SDRAM的Bank地址
     
     -- DDR Control Signals / DDR控制信号
-    signal ddr_state          : ddr_state_t := DDR_IDLE;    -- Current state of the DDR state machine / DDR状态机的当前状态
-    signal ddr_counter        : unsigned(3 downto 0) := (others => '0'); -- Counter for timing within DDR states / 用于DDR状态内部时序的计数器
-    signal ddr_refresh_counter: unsigned(8 downto 0) := (others => '0'); -- Counter to trigger auto-refresh / 用于触发自动刷新的计数器
-    signal ddr_cke_reg        : std_logic := '0';           -- DDR CKE signal register / DDR CKE信号寄存器
-    signal ddr_ras_reg        : std_logic := '1';           -- DDR nRAS signal register / DDR nRAS信号寄存器
-    signal ddr_cas_reg        : std_logic := '1';           -- DDR nCAS signal register / DDR nCAS信号寄存器
-    signal ddr_we_reg         : std_logic := '1';           -- DDR nWE signal register / DDR nWE信号寄存器
+    
+    -- Reconstructed DDR controller signals from original CPLD report
+    -- 忠实地从原始CPLD报告重构的DDR控制器信号
+    signal n_ddr_sel          : std_logic; -- DDR chip select (active low)
+    signal ddr_state_ctrl     : std_logic := '0'; -- DDR state control (orig: mc_A5)
+    signal ddr_cmd_active     : std_logic := '0'; -- DDR command active state (orig: mc_B5)
+    signal ddr_timing_ctrl    : std_logic := '0'; -- DDR timing control state (orig: mc_B6)
+    signal ddr_cmd_fsm        : std_logic := '0'; -- DDR command state machine (orig: mc_B9)
+    signal ddr_nras_reg       : std_logic := '1'; -- DDR nRAS register (orig: mc_B13)
+    signal ddr_ncas_reg       : std_logic := '1'; -- DDR nCAS register (orig: mc_B14)
+    signal ddr_nwe_reg        : std_logic := '1'; -- DDR nWE register (orig: mc_B10)
+    signal ddr_cke_reg        : std_logic := '0'; -- DDR CKE register (orig: mc_B4)
+    signal ddrcnt             : unsigned(3 downto 0) := (others => '0'); -- Internal DDR timing counter
+    signal icntr              : unsigned(8 downto 0) := (others => '0'); -- Internal refresh/timing counter
     
     -- Access Control / 访问控制
     signal current_mode       : access_mode_t := MODE_FLASH; -- Current top-level access mode / 当前顶层访问模式
@@ -114,8 +111,8 @@ architecture behavioral of superchis is
     signal address_load       : std_logic := '0';           -- Latched signal indicating address phase / 标志地址阶段的锁存信号
     signal address_load_sync  : std_logic := '0';           -- First stage sync (original: mc_H10) / 第一级同步
     signal address_load_sync2 : std_logic := '0';           -- Second stage sync (original: mc_H5) / 第二级同步
-    signal read_sync          : std_logic;                  -- Synchronized GP_NRD / 同步后的GP_NRD
-    signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3) / 同步后的写使能逻辑
+    signal read_sync          : std_logic;                  -- Synchronized GP_NRD (original: mc_H0)
+    signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3)
     signal gba_bus_idle_sync_d1       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
     signal gba_bus_idle_sync       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
@@ -181,6 +178,10 @@ begin
             current_mode <= MODE_FLASH;
         end if;
     end process;
+
+    -- DDR Chip Select Logic (from original mc_E4)
+    -- DDR片选逻辑
+    n_ddr_sel <= GP_NCS or not config_map_reg or (config_sd_enable and GP_23);
 
     -- ========================================================================
     -- Magic Address Detection and Configuration / 魔术地址检测与配置
@@ -333,183 +334,177 @@ begin
 
     -- ========================================================================
     -- DDR SDRAM Controller / DDR SDRAM 控制器
-    -- Simple state machine for basic DDR commands
-    -- NOTE: Refresh logic clocked by GP_NCS (faithful to original design)
-    -- 用于基本DDR命令的简单状态机
-    -- 注意: 刷新逻辑由GP_NCS驱动（忠实于原始设计）
+    -- This is a faithful reconstruction of the original CPLD's DDR controller.
+    -- The logic is derived directly from the boolean equations in original_report.html
+    -- 这是对原始CPLD DDR控制器的忠实重构。
+    -- 逻辑直接源自original_report.html中的布尔方程。
     -- ========================================================================
-    
-    -- DDR State Machine, clocked by GP_NCS rising edge
-    -- DDR状态机，由GP_NCS上升沿驱动
-    process(GP_NCS)
+
+    -- Internal counter with asynchronous reset, based on original CPLD report (GLB G)
+    -- 基于原始CPLD报告的带异步复位的内部计数器 (GLB G)
+    process(GP_NCS, ddr_cke_reg, ddr_nwe_reg, ddr_nras_reg, ddr_ncas_reg)
+        variable reset_icntr : std_logic;
     begin
-        if rising_edge(GP_NCS) then
-            case ddr_state is
-                when DDR_IDLE =>
-                    ddr_counter <= (others => '0');
-                    -- Start DDR operation if bus idle and in DDR mode
-                    -- 如果总线空闲且处于DDR模式则开始DDR操作
-                    if current_mode = MODE_DDR and 
-                       write_enable_sync = '1' and read_sync = '1' then
-                        ddr_state <= DDR_ACTIVATE;
-                    -- Trigger refresh if counter overflows / 计数器溢出时触发刷新
-                    elsif ddr_refresh_counter(8) = '1' then
-                        ddr_state <= DDR_REFRESH;
-                    end if;
-                    
-                when DDR_ACTIVATE =>
-                    ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0010" then  -- Wait for tRCD (RAS to CAS delay) / 等待tRCD延迟
-                        if GP_NWR = '0' and config_write_enable = '1' then
-                            ddr_state <= DDR_WRITE;
-                        elsif GP_NRD = '0' then
-                            ddr_state <= DDR_READ;
-                        else
-                            ddr_state <= DDR_IDLE;  -- No R/W, return to idle / 无读写，返回空闲
-                        end if;
-                    end if;
-                    
-                when DDR_READ =>
-                    ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0100" then  -- Wait for read latency (CL) / 等待读延迟
-                        ddr_state <= DDR_PRECHARGE;
-                    end if;
-                    
-                when DDR_WRITE =>
-                    ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0010" then  -- Wait for write recovery (tWR) / 等待写恢复时间
-                        ddr_state <= DDR_PRECHARGE;
-                    end if;
-                    
-                when DDR_PRECHARGE =>
-                    ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0011" then  -- Wait for precharge time (tRP) / 等待预充电时间
-                        ddr_state <= DDR_IDLE;
-                    end if;
-                    
-                when DDR_REFRESH =>
-                    ddr_counter <= ddr_counter + 1;
-                    if ddr_counter = "0111" then  -- Wait for refresh cycle time (tRFC) / 等待刷新周期时间
-                        ddr_state <= DDR_IDLE;
-                        ddr_refresh_counter <= (others => '0');
-                    end if;
-            end case;
-            
-            -- Increment refresh counter when not in a refresh cycle.
-            -- 在非刷新周期内，递增刷新计数器。
-            if ddr_state /= DDR_REFRESH then
-                ddr_refresh_counter <= ddr_refresh_counter + 1;
+        -- Async reset condition for high bits of icntr
+        reset_icntr := ddr_cke_reg and ddr_nwe_reg and not ddr_nras_reg and not ddr_ncas_reg;
+        if reset_icntr = '1' then
+            icntr(8 downto 7) <= "00";
+        elsif rising_edge(GP_NCS) then
+            -- Low bits are a synchronous counter
+            icntr(6 downto 0) <= icntr(6 downto 0) + 1;
+            -- High bits are toggle flip-flops based on lower bits carry-out
+            if (icntr(6 downto 0) = "1111111") then
+                icntr(7) <= not icntr(7);
+            end if;
+            if (icntr(7 downto 0) = "11111111") then
+                icntr(8) <= not icntr(8);
             end if;
         end if;
     end process;
 
-    -- DDR Command Generation / DDR命令生成
-    -- Generates DDR control signals (CKE, nRAS, nCAS, nWE) based on the current state.
-    -- 基于当前状态生成DDR控制信号。
-    process(ddr_state, current_mode, write_enable_sync)
+    -- DDR State Machine and Control Signal Generation, clocked by GP_NCS
+    -- DDR状态机和控制信号生成，由GP_NCS上升沿驱动
+    process(GP_NCS)
     begin
-        ddr_cke_reg <= '0';
-        ddr_ras_reg <= '1';
-        ddr_cas_reg <= '1';
-        ddr_we_reg  <= '1';
-        
-        if current_mode = MODE_DDR then
-            ddr_cke_reg <= '1'; -- Keep CKE high when DDR mode is active / DDR模式激活时保持CKE为高
-            
-            case ddr_state is
-                when DDR_ACTIVATE =>
-                    ddr_ras_reg <= '0';  -- Assert nRAS for ACTIVATE command / 发送激活命令
-                    
-                when DDR_READ =>
-                    ddr_cas_reg <= '0';  -- Assert nCAS for READ command / 发送读命令
-                    
-                when DDR_WRITE =>
-                    ddr_cas_reg <= '0';  -- Assert nCAS for WRITE command / 发送写命令
-                    ddr_we_reg  <= '0';  -- Assert nWE for WRITE command
-                    
-                when DDR_PRECHARGE =>
-                    ddr_ras_reg <= '0';  -- Assert nRAS for PRECHARGE command / 发送预充电命令
-                    ddr_we_reg  <= '0';  -- Assert nWE for PRECHARGE command
-                    
-                when DDR_REFRESH =>
-                    ddr_ras_reg <= '0';  -- Assert nRAS for REFRESH command / 发送刷新命令
-                    ddr_cas_reg <= '0';  -- Assert nCAS for REFRESH command
-                    
-                when others =>
-                    null;
-            end case;
+        if rising_edge(GP_NCS) then
+            -- Internal DDR timing counter (ddrcnt)
+            if (not ddr_state_ctrl and ddr_cmd_active and not ddr_timing_ctrl and not ddr_cmd_fsm) = '1' then
+                ddrcnt <= ddrcnt + 1;
+            end if;
+
+            -- ddr_cmd_active: D FF with XOR (DDR command active state)
+            ddr_cmd_active <= ((not ddr_state_ctrl and not ddr_cmd_fsm and icntr(8) and icntr(7))
+                or (ddr_state_ctrl and not ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm and write_enable_sync and read_sync)
+                or (not ddr_state_ctrl and not ddr_cmd_active and ddr_timing_ctrl and ddr_cmd_fsm and not n_ddr_sel and not read_sync)
+                or (not ddr_state_ctrl and not ddr_cmd_active and ddr_timing_ctrl and ddr_cmd_fsm and not write_enable_sync and not n_ddr_sel)
+                or (not ddr_state_ctrl and ddr_cmd_active and not ddr_cmd_fsm)
+                or (not ddr_state_ctrl and ddr_cmd_active and not ddr_timing_ctrl and icntr(8) and icntr(7))
+                or (ddr_cmd_active and not ddr_timing_ctrl and not ddr_cmd_fsm)
+                or (ddr_cmd_active and not ddr_cmd_fsm and not n_ddr_sel)
+                or (ddr_cmd_active and not ddr_cmd_fsm and icntr(8) and icntr(7))
+                ) xor (ddr_state_ctrl and ddr_timing_ctrl);
+
+            -- ddr_timing_ctrl: D FF (DDR timing control state)
+            ddr_timing_ctrl <= (not ddr_cmd_active and not ddr_timing_ctrl and write_enable_sync and read_sync)
+                or (not ddr_state_ctrl and not ddr_timing_ctrl and icntr(8) and icntr(7))
+                or (ddr_state_ctrl and ddr_timing_ctrl and not ddr_cmd_fsm and n_ddr_sel)
+                or (not ddr_state_ctrl and not ddr_cmd_active and ddr_cmd_fsm and write_enable_sync and not n_ddr_sel and read_sync)
+                or (ddr_state_ctrl and ddr_cmd_active and ddr_cmd_fsm)
+                or (not ddr_state_ctrl and not ddr_cmd_fsm and not icntr(8))
+                or (not ddr_state_ctrl and not ddr_cmd_active and not ddr_timing_ctrl)
+                or (ddr_state_ctrl and not ddr_cmd_active and not ddr_cmd_fsm)
+                or (not ddr_state_ctrl and not ddr_cmd_fsm and not icntr(7));
+
+            -- ddr_cmd_fsm: D FF (DDR command state machine)
+            ddr_cmd_fsm <= not ((not ddr_state_ctrl or ddr_cmd_active or ddr_timing_ctrl or not write_enable_sync or not read_sync)
+                and (not ddr_timing_ctrl or ddr_cmd_fsm or not n_ddr_sel or icntr(8))
+                and (not ddr_timing_ctrl or ddr_cmd_fsm or not n_ddr_sel or icntr(7))
+                and (ddr_state_ctrl or ddr_cmd_active or not ddr_timing_ctrl or not n_ddr_sel)
+                and (not ddr_state_ctrl or not ddr_cmd_active or not ddr_cmd_fsm)
+                and (ddr_state_ctrl or ddr_cmd_fsm)
+                and (ddr_cmd_active or ddr_cmd_fsm));
+
+            -- ddr_state_ctrl: D FF (DDR state control)
+            ddr_state_ctrl <= (ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm and not icntr(8))
+                or (ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm and not icntr(7))
+                or (ddrcnt = "0000" and not ddr_state_ctrl and ddr_cmd_active and ddr_timing_ctrl and icntr(8) and icntr(7))
+                or (ddr_timing_ctrl and ddr_cmd_fsm and n_ddr_sel)
+                or (not ddr_state_ctrl and ddr_cmd_active and ddr_timing_ctrl and ddr_cmd_fsm)
+                or (ddr_state_ctrl and not ddr_timing_ctrl)
+                or (ddr_state_ctrl and not ddr_cmd_active)
+                or (ddr_state_ctrl and n_ddr_sel);
+
+            -- ddr_nras_reg: D FF (DDR_NRAS)
+            ddr_nras_reg <= (ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm)
+                or (ddr_state_ctrl and not ddr_timing_ctrl and ddr_cmd_fsm)
+                or (not ddr_state_ctrl and not ddr_cmd_active and ddr_timing_ctrl)
+                or (ddr_timing_ctrl and not ddr_cmd_fsm);
+
+            -- ddr_ncas_reg: D FF (DDR_NCAS)
+            ddr_ncas_reg <= (ddr_state_ctrl and ddr_cmd_active and ddr_cmd_fsm and n_ddr_sel and not icntr(8))
+                or (ddr_state_ctrl and ddr_cmd_active and ddr_cmd_fsm and n_ddr_sel and not icntr(7))
+                or (not ddr_cmd_active and not ddr_cmd_fsm)
+                or (not ddr_state_ctrl and not ddr_cmd_active and write_enable_sync and read_sync)
+                or (ddr_timing_ctrl and not ddr_cmd_fsm)
+                or (not ddr_timing_ctrl and ddr_cmd_fsm);
+
+            -- ddr_nwe_reg: D FF (DDR_NWE)
+            ddr_nwe_reg <= not ((ddr_state_ctrl or ddr_cmd_active or not ddr_timing_ctrl or not ddr_cmd_fsm or write_enable_sync)
+                and (not ddr_state_ctrl or ddr_timing_ctrl or ddr_cmd_fsm));
+
+            -- ddr_cke_reg: D FF (DDR_CKE)
+            ddr_cke_reg <= not ((not ddr_state_ctrl or not ddr_cmd_active or not ddr_timing_ctrl or not n_ddr_sel or icntr(8))
+                and (not ddr_state_ctrl or not ddr_cmd_active or not ddr_timing_ctrl or not n_ddr_sel or icntr(7)));
         end if;
     end process;
+
+    -- ========================================================================
+    -- DDR Address and Control Line Assignment / DDR地址与控制线分配
+    -- ========================================================================
     
-    -- DDR Address Multiplexing / DDR地址复用
-    -- This is a faithful reconstruction of the original CPLD's complex address multiplexing scheme.
-    -- Each DDR address bit has state-dependent logic based on the DDR controller FSM states.
-    -- 这是对原始CPLD复杂地址复用方案的忠实重构。
-    -- 每个DDR地址位都有基于DDR控制器状态机的状态相关逻辑。
+    -- Assign control signals from reconstructed macrocells
+    DDR_NRAS <= ddr_nras_reg;
+    DDR_NCAS <= ddr_ncas_reg;
+    DDR_NWE  <= ddr_nwe_reg;
+    DDR_CKE  <= ddr_cke_reg;
     
-    -- DDR Address multiplexing based on original CPLD macrocell logic
-    -- These signals match the original Boolean equations from the CPLD fitter report
-    -- 基于原始CPLD宏单元逻辑的DDR地址复用
-    -- 这些信号与CPLD布线报告中的原始布尔方程匹配
-    process(ddr_state, internal_address, GP_16, GP_17, GP_18, GP_19, GP_20, GP_21, GP_22, GP_23)
+    -- DDR Address and Bank multiplexing based on original CPLD macrocell logic
+    -- 基于原始CPLD宏单元逻辑的DDR地址和Bank复用
+    process(GP_NCS)
         -- Local signal to identify DDR address phases for cleaner code
         -- 用于识别DDR地址阶段的本地信号，使代码更清晰
         variable is_row_phase    : boolean;
         variable is_column_phase : boolean;
     begin
-        -- Decode DDR state to address phases (equivalent to original CPLD macrocell states)
-        -- 将DDR状态解码为地址阶段（等效于原始CPLD宏单元状态）
-        -- Original: mc_A5='0', mc_B5='0', mc_B6='0', mc_B9='1' for row phase
-        -- Original: mc_A5='0', mc_B5='0', mc_B6='1', mc_B9='1' for column phase
-        is_row_phase    := (ddr_state = DDR_ACTIVATE);
-        is_column_phase := (ddr_state = DDR_READ or ddr_state = DDR_WRITE or ddr_state = DDR_PRECHARGE);
+        -- Decode DDR state to address phases based on the core state machine signals
+        -- 根据核心状态机信号将DDR状态解码为地址阶段
+        is_row_phase    := (not ddr_state_ctrl and not ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm) = '1';
+        is_column_phase := (not ddr_state_ctrl and not ddr_cmd_active and ddr_timing_ctrl and ddr_cmd_fsm) = '1';
         
-        -- Default values
-        ddr_address      <= (others => '0');
-        ddr_bank_address <= GP_23 & GP_22;  -- Bank address is stable during both phases
+        if rising_edge(GP_NCS) then
+            -- Bank Address (stable across phases)
+            if (not ddr_state_ctrl and not ddr_cmd_active and ddr_cmd_fsm) = '1' then
+                ddr_bank_address(1) <= GP_23; -- Bank select bit 1
+                ddr_bank_address(0) <= GP_22; -- Bank select bit 0
+            end if;
 
-        -- DDR Address mapping based on CPLD macrocell logic
-        -- DDR地址映射基于CPLD宏单元逻辑
-        if is_row_phase then
-            -- Row Address Phase / 行地址阶段
-            ddr_address(0)  <= internal_address(9);   -- DDR-A0 = mc_A8
-            ddr_address(1)  <= not internal_address(10); -- DDR-A1 = mc_A4
-            ddr_address(2)  <= internal_address(11);  -- DDR-A2 = mc_A0
-            ddr_address(3)  <= internal_address(12);  -- DDR-A3 = mc_H4
-            ddr_address(4)  <= internal_address(13);  -- DDR-A4 = mc_H2
-            ddr_address(5)  <= internal_address(14);  -- DDR-A5 = mc_A2
-            ddr_address(6)  <= internal_address(15);  -- DDR-A6 = mc_A6
-            ddr_address(7)  <= GP_16;                 -- DDR-A7 = mc_A1
-            ddr_address(8)  <= not GP_17;             -- DDR-A8 = mc_A15
-            ddr_address(9)  <= GP_18;                 -- DDR-A9 = mc_B1
-            ddr_address(10) <= not GP_19;             -- DDR-A10 = mc_A14
-            ddr_address(11) <= GP_20;                 -- DDR-A11 = mc_B3
-            ddr_address(12) <= GP_21;                 -- DDR-A12 = mc_C0
-            
-        elsif is_column_phase then
-            -- Column Address Phase / 列地址阶段
-            ddr_address(0)  <= internal_address(0);   -- DDR-A0
-            ddr_address(1)  <= not internal_address(1);  -- DDR-A1
-            ddr_address(2)  <= internal_address(2);   -- DDR-A2
-            ddr_address(3)  <= internal_address(3);   -- DDR-A3
-            ddr_address(4)  <= internal_address(4);   -- DDR-A4
-            ddr_address(5)  <= internal_address(5);   -- DDR-A5
-            ddr_address(6)  <= internal_address(6);   -- DDR-A6
-            ddr_address(7)  <= internal_address(7);   -- DDR-A7
-            ddr_address(8)  <= not internal_address(8);  -- DDR-A8
-            ddr_address(9)  <= '0';                   -- DDR-A9 (always 0 in column phase)
-            ddr_address(10) <= GP_19;                 -- DDR-A10 (special case for precharge)
-            ddr_address(11) <= '0';                   -- DDR-A11 (always 0 in column phase)
-            ddr_address(12) <= '0';                   -- DDR-A12 (always 0 in column phase)
+            -- Row/Column Address Multiplexing
+            if is_row_phase then
+                -- Row Address Phase
+                ddr_address(0)  <= internal_address(9);
+                ddr_address(1)  <= not internal_address(10);
+                ddr_address(2)  <= internal_address(11);
+                ddr_address(3)  <= internal_address(12);
+                ddr_address(4)  <= internal_address(13);
+                ddr_address(5)  <= internal_address(14);
+                ddr_address(6)  <= internal_address(15);
+                ddr_address(7)  <= GP_16;
+                ddr_address(8)  <= not GP_17;
+                ddr_address(9)  <= GP_18;
+                ddr_address(10) <= not GP_19;
+                ddr_address(11) <= GP_20;
+                ddr_address(12) <= GP_21;
+            elsif is_column_phase then
+                -- Column Address Phase
+                ddr_address(0)  <= internal_address(0);
+                ddr_address(1)  <= not internal_address(1);
+                ddr_address(2)  <= internal_address(2);
+                ddr_address(3)  <= internal_address(3);
+                ddr_address(4)  <= internal_address(4);
+                ddr_address(5)  <= internal_address(5);
+                ddr_address(6)  <= internal_address(6);
+                ddr_address(7)  <= internal_address(7);
+                ddr_address(8)  <= not internal_address(8);
+                ddr_address(9)  <= '0'; -- Tied low
+                ddr_address(10) <= not GP_19; -- Special case for precharge all
+                ddr_address(11) <= '0'; -- Tied low
+                ddr_address(12) <= '0'; -- Tied low
+            end if;
         end if;
     end process;
     
-    DDR_A    <= ddr_address;
-    DDR_BA   <= ddr_bank_address;
-    DDR_CKE  <= ddr_cke_reg;
-    DDR_NRAS <= ddr_ras_reg;
-    DDR_NCAS <= ddr_cas_reg;
-    DDR_NWE  <= ddr_we_reg;
+    DDR_A  <= ddr_address;
+    DDR_BA <= ddr_bank_address;
 
     -- ========================================================================
     -- Chip Enable Generation / 片选信号生成
