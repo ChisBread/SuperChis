@@ -9,7 +9,7 @@ entity superchis is
         GP_NCS   : in  std_logic;  -- GBA Cartridge Chip Select (Active Low) / GBA卡带片选 (低电平有效)
         GP_NWR   : in  std_logic;  -- GBA Write Enable (Active Low) / GBA写使能 (低电平有效)
         GP_NRD   : in  std_logic;  -- GBA Read Enable (Active Low) / GBA读使能 (低电平有效)
-        clk3     : in  std_logic;  -- Auxiliary Clock (Original design dependency) / 辅助时钟 (源于原始设计)
+        -- clk3     : in  std_logic;  -- Auxiliary Clock (Original design dependency) / 辅助时钟 (源于原始设计)
 
         -- General Purpose IO (from GBA cart edge) / GBA卡带接口通用IO
         GP       : inout std_logic_vector(15 downto 0);  -- GBA Data Bus (Address/Data multiplexed) / GBA数据总线 (地址/数据复用)
@@ -32,6 +32,7 @@ entity superchis is
 
         -- Flash Interface / 闪存接口
         FLASH_A          : out std_logic_vector(15 downto 0);  -- Flash Address Bus / 闪存地址总线
+        FLASH_HIGH       : out std_logic_vector(5 downto 0);   -- Flash High Bank Select (5 bits for 32 banks) / 闪存Bank选择 (5位用于32个Bank)
         FLASH_NCE        : out std_logic;                       -- Flash Chip Enable (Active Low) / 闪存片选 (低电平有效)
         FLASH_SRAM_NWE   : out std_logic;                       -- Flash/SRAM Write Enable (Active Low) / 闪存/SRAM 写使能 (低电平有效)
         FLASH_SRAM_NOE   : out std_logic;                       -- Flash/SRAM Output Enable (Active Low) / 闪存/SRAM 输出使能 (低电平有效)
@@ -298,7 +299,13 @@ begin
     -- Implements complex banking logic from original CPLD
     -- 实现源自原始CPLD的复杂Bank切换逻辑
     -- ========================================================================
-    
+    -- 高位Bank
+    -- TODO: 通过配置使得高位Bank可以进行0~31的偏移，即 FLASH_HIGH = unsigned(GP_23~GP_21) + BANK_OFFSET
+    FLASH_HIGH(0) <= GP_21;
+    FLASH_HIGH(1) <= GP_22;
+    FLASH_HIGH(2) <= GP_23;
+    FLASH_HIGH(3) <= '0'; -- Reserved, not used in this design
+    FLASH_HIGH(4) <= '0'; -- Reserved, not used in this design
     process(internal_address, config_bank_select, current_mode, config_write_enable)
     begin
         if current_mode = MODE_FLASH then
@@ -586,7 +593,7 @@ begin
     -- The clk3 dependency is unusual but faithful to the original.
     -- FLASH_NCE在以下情况使能: GP_NCS有效, 非DDR模式, 且非SD模式(或GP_23为低)。
     -- 对clk3的依赖不寻常，但忠于原始设计。
-    FLASH_NCE <= GP_NCS or clk3 or config_map_reg or (config_sd_enable and GP_23);
+    FLASH_NCE <= GP_NCS or config_map_reg or (config_sd_enable and GP_23); -- or clk3
 
     -- N_SDOUT (SD I/O block enable) is enabled when: GP_NCS is active, SD mode is enabled, and GP_23 is high.
     -- It is disabled at the magic address to prevent conflicts.
@@ -642,7 +649,7 @@ begin
     -- The behavior is controlled by GP_22:
     --  - GP_22 = '0' (Debug Mode): Exposes internal toggle and state flip-flops for debugging.
     --  - GP_22 = '1' (Data Mode):  Exposes actual SD line data and processed states.
-    gp_bus_mux: process(GP_22, SD_CMD, SD_DAT, clk3, sd_cmd_state, sd_dat1_state, sd_dat2_state, sd_dat3_state, 
+    gp_bus_mux: process(GP_22, SD_CMD, SD_DAT, sd_cmd_state, sd_dat1_state, sd_dat2_state, sd_dat3_state, 
                         sd_cmd_toggle, sd_dat1_toggle, sd_dat2_toggle, sd_dat3_toggle, 
                         sd_dat0_feedback_toggle, sd_dat1_feedback_toggle, sd_dat2_feedback_toggle, sd_dat3_feedback_toggle,
                         sd_dat0_out_data, sd_dat1_out_data, sd_dat2_out_data)
@@ -675,7 +682,7 @@ begin
             gp_output_data(5)  <= sd_dat0_out_data;          -- mc_H3
             gp_output_data(6)  <= sd_dat1_out_data;          -- mc_H13
             gp_output_data(7)  <= sd_dat2_out_data;          -- mc_H7
-            gp_output_data(8)  <= clk3;                      -- Raw clk3 input
+            gp_output_data(8)  <= '0';                      --  Tied to GND / Raw clk3 input
             gp_output_data(9)  <= '0';                       -- Tied to GND
             gp_output_data(10) <= '1';                       -- Tied to VCC
             gp_output_data(11) <= '1';                       -- Tied to VCC
