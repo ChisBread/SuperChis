@@ -197,6 +197,8 @@ begin
                                GP_20 = '1' and GP_21 = '1' and GP_22 = '1' and GP_23 = '1') else '0';
     
     -- Magic value detection: 0xA55A on the data bus.
+    -- Original pattern (mc_G2): !GP(0) & GP(1) & !GP(2) & GP(3) & GP(4) & !GP(5) & GP(6) & !GP(7) & 
+    --                   GP(8) & !GP(9) & GP(10) & !GP(11) = 0101 0101 1010 = 0xA55A (low 12 bits)
     -- 魔术值检测: 数据总线上的0xA55A。
     magic_value_match <= '1' when (GP(15 downto 0) = x"A55A") else '0';
     
@@ -304,13 +306,13 @@ begin
 
             -- Scrambling combined with Banking Logic (OR logic from report)
             -- 与Bank逻辑结合的重映射部分（来自报告的“或”逻辑）
-            flash_address(1)  <= config_bank_select(3) or internal_address(1); -- FLASH-A1 = mc_C1 = mc_B15 | iaddr-a1
-            flash_address(3)  <= config_bank_select(3) or internal_address(5) or config_bank_select(4); -- FLASH-A3 = mc_C15 = mc_B15 | iaddr-a5 | mc_C9
-            flash_address(6)  <= config_bank_select(4) or internal_address(8); -- FLASH-A6 = mc_C8 = mc_C9 | iaddr-a8
+            flash_address(1)  <= internal_address(1) or config_bank_select(3); -- FLASH-A1 = mc_C1 = mc_B15 | iaddr-a1
+            flash_address(3)  <= internal_address(5) or config_bank_select(3) or config_bank_select(4); -- FLASH-A3 = mc_C15 = mc_B15 | iaddr-a5 | mc_C9
+            flash_address(6)  <= internal_address(8) or config_bank_select(4) ; -- FLASH-A6 = mc_C8 = mc_C9 | iaddr-a8
             flash_address(7)  <= internal_address(4)  or config_bank_select(0); -- FLASH-A7 = mc_D1 = iaddr-a4 | mc_C10
             flash_address(11) <= internal_address(11) or config_bank_select(2); -- FLASH-A11 = mc_D2 = iaddr-a11 | mc_D9
             flash_address(14) <= internal_address(14) or config_bank_select(1); -- FLASH-A14 = mc_C6 = iaddr-a14 | mc_G14
-            flash_address(15) <= config_bank_select(0) or internal_address(15) or config_bank_select(2) or config_bank_select(1); -- FLASH-A15 = mc_D0 = mc_C10 | iaddr-a15 | mc_D9 | mc_G14
+            flash_address(15) <= internal_address(15) or config_bank_select(0) or config_bank_select(1) or config_bank_select(2); -- FLASH-A15 = mc_D0 = mc_C10 | iaddr-a15 | mc_D9 | mc_G14
 
             -- Gated Logic (AND logic from report)
             -- 门控逻辑部分（来自报告的“与”逻辑）
