@@ -407,7 +407,7 @@ begin
             -- ddr_state_ctrl: D FF (DDR state control)
             ddr_state_ctrl <= (ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm and not icntr(8))
                 or (ddr_cmd_active and not ddr_timing_ctrl and ddr_cmd_fsm and not icntr(7))
-                or (ddrcnt = "0000" and not ddr_state_ctrl and ddr_cmd_active and ddr_timing_ctrl and icntr(8) and icntr(7))
+                or (not (ddrcnt(3) and not ddrcnt(2) and not ddrcnt(1) and not ddrcnt(0)) and not ddr_state_ctrl and ddr_cmd_active and ddr_timing_ctrl and icntr(8) and icntr(7))
                 or (ddr_timing_ctrl and ddr_cmd_fsm and n_ddr_sel)
                 or (not ddr_state_ctrl and ddr_cmd_active and ddr_timing_ctrl and ddr_cmd_fsm)
                 or (ddr_state_ctrl and not ddr_timing_ctrl)
