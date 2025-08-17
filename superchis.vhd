@@ -332,7 +332,6 @@ begin
     -- SRAM A16 is controlled by write enable config bit for banking
     -- SRAM A16由写使能配置位控制，用于Bank切换
     SRAM_A16 <= config_write_enable;
-    FLASH_A <= flash_address;
     -- 高位Bank
     -- 通过配置使得高位Bank可以进行0~31的偏移，即 FLASH_HIGH = unsigned(NOR_A25,NOR_A24,GP_23~GP_21) + BANK_OFFSET
     process(internal_address, config_bank_select, GP_21, GP_22, GP_23)
@@ -346,6 +345,7 @@ begin
         FLASH_HIGH <= std_logic_vector(flash_high_tmp + unsigned(config_bank_select));
     end process;
     flash_address <= std_logic_vector(internal_address);
+    FLASH_A <= flash_address;
     -- ---- 以下是旧版SuperCard的逻辑
     -- process(internal_address, config_bank_select, current_mode, config_write_enable)
     -- begin
