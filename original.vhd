@@ -7,9 +7,10 @@ entity superchis is
         -- Global Clocks and Control
         CLK50MHz : in  std_logic;
         GP_NCS   : in  std_logic;
+        GP_NCS2_EXT  : in  std_logic;
+        GP_NCS2  : out  std_logic;
         GP_NWR   : in  std_logic;
         GP_NRD   : in  std_logic;
-        clk3     : in  std_logic;
 
         -- General Purpose IO (from GBA cart edge)
         GP       : inout std_logic_vector(15 downto 0);
@@ -32,13 +33,13 @@ entity superchis is
 
         -- Flash/SRAM Interface
         FLASH_A          : out std_logic_vector(15 downto 0);
+        FLASH_HIGH       : out std_logic_vector(4 downto 0);   -- Flash High Bank Select (5 bits for 32 banks) / 闪存Bank选择 (5位用于32个Bank)
         FLASH_NCE        : out std_logic;
         FLASH_SRAM_NWE   : out std_logic;
         FLASH_SRAM_NOE   : out std_logic;
         SRAM_A16         : out std_logic;
 
         -- SD Card Interface
-        N_SDOUT : out std_logic;
         SD_CLK  : out std_logic;
         SD_CMD  : inout std_logic;
         SD_DAT  : inout std_logic_vector(3 downto 0)
@@ -51,116 +52,13 @@ architecture behavioral of superchis is
     -- Internal Macrocell signals (CPLD内部宏单元信号)
     signal mc_A0, mc_A1, mc_A2, mc_A4, mc_A5, mc_A6, mc_A8, mc_A14, mc_A15 : std_logic;
     signal mc_B0, mc_B1, mc_B2, mc_B3, mc_B4, mc_B5, mc_B6, mc_B8, mc_B9, mc_B10, mc_B13, mc_B14, mc_B15 : std_logic;
-    signal mc_C0, mc_C1, mc_C6, mc_C8, mc_C9, mc_C10, mc_C13, mc_C14, mc_C15 : std_logic;
-    signal mc_D0, mc_D1, mc_D2, mc_D9, mc_D10 : std_logic;
+    signal mc_C0, mc_C1, mc_C6, mc_C8, mc_C9, mc_C10, mc_C13, mc_C15 : std_logic := '0';
+    signal mc_D0, mc_D1, mc_D2, mc_D9 : std_logic;
     signal mc_E0, mc_E2, mc_E3, mc_E6, mc_E7, mc_E8, mc_E9, mc_E10, mc_E11, mc_E12, mc_E13, mc_E14, mc_E15 : std_logic;
     signal mc_F0, mc_F1, mc_F2, mc_F3, mc_F4, mc_F5, mc_F6, mc_F7, mc_F8, mc_F9, mc_F10, mc_F11, mc_F12, mc_F13, mc_F14, mc_F15 : std_logic;
-    signal mc_G1, mc_G2, mc_G4, mc_G6, mc_G10, mc_G12, mc_G14 : std_logic;
+    signal mc_G1, mc_G2, mc_G4, mc_G6, mc_G10, mc_G12, mc_G14 : std_logic := '0';
     signal mc_H0, mc_H1, mc_H2, mc_H3, mc_H4, mc_H5, mc_H6, mc_H7, mc_H8, mc_H9, mc_H10, mc_H11, mc_H13, mc_H14, mc_H15 : std_logic;
 
-    --
-    -- ============================================================================
-    -- MACROCELL SIGNAL ALIASES AND FUNCTIONALITY DESCRIPTION
-    -- ============================================================================
-    --
-    -- | GLB | Signal | Alias                    | Function Description
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | A   | mc_A0  | ddr_addr_bit2           | DDR SDRAM Address bit 2 (T FF)
-    -- | A   | mc_A1  | ddr_addr_bit7           | DDR SDRAM Address bit 7 (T FF)  
-    -- | A   | mc_A2  | ddr_addr_bit5           | DDR SDRAM Address bit 5 (D FF)
-    -- | A   | mc_A4  | ddr_addr_bit1           | DDR SDRAM Address bit 1 (T FF)
-    -- | A   | mc_A5  | ddr_state_ctrl          | DDR State Machine Control (D FF)
-    -- | A   | mc_A6  | ddr_addr_bit6           | DDR SDRAM Address bit 6 (T FF)
-    -- | A   | mc_A8  | ddr_addr_bit0           | DDR SDRAM Address bit 0 (T FF)
-    -- | A   | mc_A14 | ddr_addr_bit10          | DDR SDRAM Address bit 10 (T FF)
-    -- | A   | mc_A15 | ddr_addr_bit8           | DDR SDRAM Address bit 8 (T FF)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | B   | mc_B0  | ddr_bank1               | DDR Bank Address bit 1 (D FF)
-    -- | B   | mc_B1  | ddr_addr_bit9           | DDR SDRAM Address bit 9 (D FF)
-    -- | B   | mc_B2  | ddr_bank0               | DDR Bank Address bit 0 (D FF) 
-    -- | B   | mc_B3  | ddr_addr_bit11          | DDR SDRAM Address bit 11 (D FF)
-    -- | B   | mc_B4  | ddr_cke                 | DDR Clock Enable signal (D FF)
-    -- | B   | mc_B5  | ddr_cmd_active          | DDR Command Active state (D FF with XOR)
-    -- | B   | mc_B6  | ddr_timing_ctrl         | DDR Timing Control state (D FF)
-    -- | B   | mc_B8  | unlock_sequence         | Magic Unlock Sequence Detector (Combo)
-    -- | B   | mc_B9  | ddr_cmd_state           | DDR Command State Machine (D FF)
-    -- | B   | mc_B10 | ddr_write_ctrl          | DDR Write Control (D FF, inverted)
-    -- | B   | mc_B13 | ddr_row_active          | DDR Row Active Signal (D FF)
-    -- | B   | mc_B14 | ddr_col_active          | DDR Column Active Signal (D FF)
-    -- | B   | mc_B15 | mode_selector           | Configuration Mode Selector (D FF)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | C   | mc_C0  | flash_addr_bit12        | Flash/SRAM Address bit 12 -> DDR_A(12) (D FF)
-    -- | C   | mc_C1  | flash_addr_bit1_ctrl    | Flash Address bit 1 Control (Combo)
-    -- | C   | mc_C6  | flash_addr_bit14_ctrl   | Flash Address bit 14 Control (Combo)
-    -- | C   | mc_C8  | flash_addr_bit6_ctrl    | Flash Address bit 6 Control (Combo)
-    -- | C   | mc_C9  | flash_addr_mode         | Flash Address Mode Control (D FF)
-    -- | C   | mc_C10 | flash_banking_ctrl      | Flash Banking Control (D FF)
-    -- | C   | mc_C13 | magic_unlock_ctrl       | Magic Address Unlock Control (D FF)
-    -- | C   | mc_C14 | flash_addr_always_high  | Flash Address Always High (Tied to '1')
-    -- | C   | mc_C15 | flash_addr_bit3_ctrl    | Flash Address bit 3 Control (Combo)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | D   | mc_D0  | flash_addr_bit15_ctrl   | Flash Address bit 15 Control (Combo)
-    -- | D   | mc_D1  | flash_addr_bit7_ctrl    | Flash Address bit 7 Control (Combo)
-    -- | D   | mc_D2  | flash_addr_bit11_ctrl   | Flash Address bit 11 Control (Combo)
-    -- | D   | mc_D9  | flash_banking_mode      | Flash Banking Mode Control (D FF)
-    -- | D   | mc_D10 | flash_addr_low_always   | Flash Address Always Low (Tied to '0')
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | E   | mc_E0  | sd_dat2_state           | SD Card DAT2 State Logic (D FF)
-    -- | E   | mc_E2  | sd_dat3_state           | SD Card DAT3 State Logic (D FF)
-    -- | E   | mc_E3  | write_enable_sync       | Write Enable Synchronizer (D FF)
-    -- | E   | mc_E6  | flash_chip_enable       | Flash Chip Enable Control (Combo)
-    -- | E   | mc_E7  | flash_addr_bit9_gated   | Flash Address bit 9 Gated (Combo)
-    -- | E   | mc_E8  | gp_bus_data0            | GP Bus Data bit 0 Multiplexer (Combo)
-    -- | E   | mc_E9  | flash_write_enable      | Flash Write Enable (Direct GP_NWR)
-    -- | E   | mc_E10 | gp_bus_data1            | GP Bus Data bit 1 Multiplexer (Combo)
-    -- | E   | mc_E11 | flash_read_enable       | Flash Read Enable (Direct GP_NRD)
-    -- | E   | mc_E12 | gp_bus_data2            | GP Bus Data bit 2 Multiplexer (Combo)
-    -- | E   | mc_E13 | sd_cmd_state            | SD Card CMD State Logic (D FF)
-    -- | E   | mc_E14 | gp_bus_data3            | GP Bus Data bit 3 Multiplexer (Combo)
-    -- | E   | mc_E15 | sd_dat11_state          | SD Card DAT Toggle State (T FF)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | F   | mc_F0  | sd_dat2_toggle          | SD Card DAT2 Toggle Logic (T FF)
-    -- | F   | mc_F1  | sd_dat3_toggle          | SD Card DAT3 Toggle Logic (T FF)
-    -- | F   | mc_F2  | gp_bus_mux4             | GP Bus bit 4 Data Multiplexer (Combo)
-    -- | F   | mc_F3  | gp_bus_mux5             | GP Bus bit 5 Data Multiplexer (Combo)
-    -- | F   | mc_F4  | gp_bus_mux6             | GP Bus bit 6 Data Multiplexer (Combo)
-    -- | F   | mc_F5  | sd_dat1_state           | SD Card DAT1 State Logic (D FF)
-    -- | F   | mc_F6  | gp_bus_mux7             | GP Bus bit 7 Data Multiplexer (Combo)
-    -- | F   | mc_F7  | sd_cmd_toggle           | SD Card CMD Toggle Logic (T FF)
-    -- | F   | mc_F8  | gp_bus_mux8             | GP Bus bit 8 Data Multiplexer (Combo)
-    -- | F   | mc_F9  | sd_dat1_toggle          | SD Card DAT1 Toggle Logic (T FF)
-    -- | F   | mc_F10 | gp_bus_mux9             | GP Bus bit 9 Data Multiplexer (Combo)
-    -- | F   | mc_F11 | sd_dat0_toggle          | SD Card DAT0 Toggle Logic (T FF)
-    -- | F   | mc_F12 | gp_bus_mux10            | GP Bus bit 10 Data Multiplexer (Combo)
-    -- | F   | mc_F13 | gp_bus_mux11            | GP Bus bit 11 Data Multiplexer (Combo)
-    -- | F   | mc_F14 | sd_dat0_toggle_f14      | SD Card DAT0 Toggle F14 Logic (T FF)
-    -- | F   | mc_F15 | sd_dat1_toggle_f15      | SD Card DAT1 Toggle F15 Logic (T FF)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | G   | mc_G1  | unlock_pattern1         | Unlock Pattern 1 Detector (D FF)
-    -- | G   | mc_G2  | unlock_pattern2         | Unlock Pattern 2 Detector (D FF)
-    -- | G   | mc_G4  | gp_bus_mux12            | GP Bus bit 12 Data Multiplexer (Combo)
-    -- | G   | mc_G6  | gp_bus_mux15            | GP Bus bit 15 Data Multiplexer (Combo)
-    -- | G   | mc_G10 | gp_bus_mux14            | GP Bus bit 14 Data Multiplexer (Combo)
-    -- | G   | mc_G12 | gp_bus_mux13            | GP Bus bit 13 Data Multiplexer (Combo)
-    -- | G   | mc_G14 | bank_select_ctrl        | Bank Select Control Register (D FF)
-    -- |-----|--------|--------------------------|--------------------------------------------------
-    -- | H   | mc_H0  | read_enable_sync        | Read Enable Synchronizer (D FF)
-    -- | H   | mc_H1  | sd_clock_gen            | SD Card Clock Generator (Combo)
-    -- | H   | mc_H2  | flash_addr_bit4         | Flash/DDR Address bit 4 Control (D FF)
-    -- | H   | mc_H3  | sd_dat0_out             | SD Card DAT0 Output Logic (D FF)
-    -- | H   | mc_H4  | flash_addr_bit3         | Flash/DDR Address bit 3 Control (T FF)
-    -- | H   | mc_H5  | timing_sync1            | Timing Synchronization Stage 1 (D FF)
-    -- | H   | mc_H6  | sd_dat3_out             | SD Card DAT3 Output (= mc_H9)
-    -- | H   | mc_H7  | sd_dat2_out             | SD Card DAT2 Output Logic (D FF)
-    -- | H   | mc_H8  | sd_cmd_out              | SD Card CMD Output (= mc_H9)
-    -- | H   | mc_H9  | sd_dat_cmd_common       | SD Card DAT/CMD Common Logic (D FF)
-    -- | H   | mc_H10 | timing_sync2            | Timing Synchronization Stage 2 (D FF)
-    -- | H   | mc_H11 | iaddr_clock_gen         | Internal Address Counter Clock (Combo)
-    -- | H   | mc_H13 | sd_dat1_out             | SD Card DAT1 Output Logic (D FF)
-    -- | H   | mc_H14 | timing_sync3            | Timing Synchronization Stage 3 (D FF)
-    -- | H   | mc_H15 | timing_sync4            | Timing Synchronization Stage 4 (D FF)
-    -- ============================================================================
-    --
     -- GLB Functionality Summary:
     -- - GLB A: DDR SDRAM Address Generation and State Control
     -- - GLB B: DDR SDRAM Command and Control Signal Generation  
@@ -178,8 +76,8 @@ architecture behavioral of superchis is
     signal iaddr       : unsigned(15 downto 0); -- 内部地址总线寄存器
     signal SDENABLE    : std_logic; -- SD卡功能使能
     signal MAP_REG     : std_logic; -- 模式映射寄存器 (DDR/SRAM)
-    signal MAGICADDR   : std_logic; -- 特殊地址匹配标志
-    signal LOAD_IREG   : std_logic; -- 内部寄存器加载信号
+    signal MAGICADDR   : std_logic := '0'; -- 特殊地址匹配标志
+    signal LOAD_IREG   : std_logic := '0'; -- 内部寄存器加载信号
     signal N_DDR_SEL   : std_logic; -- DDR SDRAM 片选信号 (低有效)
     signal WRITEENABLE : std_logic; -- 写使能
     signal addr_load   : std_logic; -- 地址加载信号
@@ -315,16 +213,16 @@ begin
                 or (mc_A5 and not mc_B5 and not mc_B9)
                 or (not mc_A5 and not mc_B9 and not icntr(7));
             -- mc_B9: D FF
-            mc_B9 <= not ((not mc_A5 or mc_B5 or mc_B6 or not mc_E3 or not mc_H0)
+            mc_B9 <= (not mc_A5 or mc_B5 or mc_B6 or not mc_E3 or not mc_H0)
                 and (not mc_B6 or mc_B9 or not N_DDR_SEL or icntr(8))
                 and (not mc_B6 or mc_B9 or not N_DDR_SEL or icntr(7))
                 and (mc_A5 or mc_B5 or not mc_B6 or not N_DDR_SEL)
                 and (not mc_A5 or not mc_B5 or not mc_B9)
                 and (mc_A5 or mc_B9)
-                and (mc_B5 or mc_B9));
+                and (mc_B5 or mc_B9);
             -- mc_B10: D FF
-            mc_B10 <= not ((mc_A5 or mc_B5 or not mc_B6 or not mc_B9 or mc_E3)
-                and (not mc_A5 or mc_B6 or mc_B9));
+            mc_B10 <= (mc_A5 or mc_B5 or not mc_B6 or not mc_B9 or mc_E3)
+                and (not mc_A5 or mc_B6 or mc_B9);
             -- mc_B13: D FF
             mc_B13 <= (mc_B5 and not mc_B6 and mc_B9)
                 or (mc_A5 and not mc_B6 and mc_B9)
@@ -349,12 +247,14 @@ begin
     DDR_A(11) <= mc_B3;
 
     -- 组合逻辑，用于检测所有地址和控制信号是否处于特定状态 (可能用于模式解锁)
+    -- 根据 original_report.html: mc_B8 = GP-16 & GP-17 & GP-0 & GP-1 & GP-2 & GP-3 & GP-5 & GP-10 & GP-11 & GP-18 & GP-22 & GP-21 & GP-20 & GP-19 & GP-15 & GP-13 & GP-12 & GP-23
     mc_B8 <= GP_16 and GP_17 and GP(0) and GP(1) and GP(2) and GP(3) and GP(5) and GP(10) and GP(11) and GP_18 and GP_22 and GP_21 and GP_20 and GP_19 and GP(15) and GP(13) and GP(12) and GP_23;
 
     -- 寄存器加载过程，在GP_NWR上升沿触发
     process(GP_NWR)
     begin
-        if falling_edge(GP_NWR) then
+        if rising_edge(GP_NWR) then
+            -- 只有在 LOAD_IREG='1' 时这些信号才更新 (Clock Enable)
             if LOAD_IREG = '1' then
                 SDENABLE <= GP(1);
                 MAP_REG <= GP(0);
@@ -388,11 +288,11 @@ begin
     FLASH_A(6) <= mc_C8;
     mc_C15 <= mc_B15 or iaddr(5) or mc_C9;
     FLASH_A(3) <= mc_C15;
-    mc_C14 <= '1'; -- Tied high (硬编码为高电平)
 
     process(GP_NWR)
     begin
-        if falling_edge(GP_NWR) then
+        if rising_edge(GP_NWR) then
+            -- 只有在 LOAD_IREG='1' 时这些信号才更新 (Clock Enable)
             if LOAD_IREG = '1' then
                 mc_C9 <= GP(4) and not GP(5) and GP(14);
                 mc_C10 <= GP(4) and not GP(8) and GP(12);
@@ -401,12 +301,20 @@ begin
     end process;
 
     -- 特殊功能控制寄存器，由CLK50MHz同步
+    -- Magic解锁序列（基于original_report.html的实际实现）：
+    -- 两阶段解锁：第一阶段触发MAGICADDR，第二阶段触发mc_G2
     process(CLK50MHz)
     begin
         if rising_edge(CLK50MHz) then
+            -- MAGICADDR: D FF，第一阶段魔法解锁 (GP-4&GP-6&GP-7&GP-8&GP-9&GP-14&mc_B8)
+            -- 要求：GP(4)=1, GP(6)=1, GP(7)=1, GP(8)=1, GP(9)=1, GP(14)=1
             MAGICADDR <= GP(4) and GP(6) and GP(7) and GP(8) and GP(9) and GP(14) and mc_B8;
-            LOAD_IREG <= GP(4) and GP(6) and GP(7) and GP(8) and GP(9) and GP(14) and mc_B8 and mc_G1;
+            
+            -- mc_C13: D FF，在mc_G2和第一阶段地址条件满足时设置
             mc_C13 <= GP(4) and GP(6) and GP(7) and GP(8) and GP(9) and GP(14) and mc_B8 and mc_G2;
+            
+            -- LOAD_IREG: D FF，在mc_G1和第一阶段地址条件满足时设置
+            LOAD_IREG <= GP(4) and GP(6) and GP(7) and GP(8) and GP(9) and GP(14) and mc_B8 and mc_G1;
         end if;
     end process;
 
@@ -422,11 +330,11 @@ begin
     FLASH_A(12) <= iaddr(12);
     FLASH_A(0) <= iaddr(7);
     FLASH_A(10) <= iaddr(10);
-    mc_D10 <= '0'; -- Tied low (硬编码为低电平)
 
     process(GP_NWR)
     begin
-        if falling_edge(GP_NWR) then
+        if rising_edge(GP_NWR) then
+            -- 只有在 LOAD_IREG='1' 时 mc_D9 才更新 (Clock Enable)
             if LOAD_IREG = '1' then
                 mc_D9 <= GP(7) and GP(9) and not GP(15);
             end if;
@@ -480,10 +388,9 @@ begin
     end process;
     FLASH_A(9) <= mc_E7;
     N_SDOUT_internal <= GP_NCS or not GP_23 or not SDENABLE or MAGICADDR; -- SD卡输出使能（低有效）
-    N_SDOUT <= N_SDOUT_internal; -- 连接到输出端口
     FLASH_NCE <= mc_E6; -- Flash芯片使能（低有效）
     -- Simplified from (A|B)&(A|C) to A|(B&C)
-    mc_E6 <= (GP_NCS or clk3 or MAP_REG) or (SDENABLE and GP_23);
+    mc_E6 <= (GP_NCS or MAP_REG) or (SDENABLE and GP_23);
     FLASH_SRAM_NWE <= mc_E9; -- Flash/SRAM 写使能（低有效）
     mc_E9 <= GP_NWR;
     FLASH_SRAM_NOE <= mc_E11; -- Flash/SRAM 读使能（低有效）
@@ -555,7 +462,7 @@ begin
     mc_F3 <= (GP_22 and mc_H3) or (not GP_22 and mc_F5);
     mc_F4 <= (GP_22 and mc_H13) or (not GP_22 and mc_E0);
     mc_F6 <= (GP_22 and mc_H7) or (not GP_22 and mc_E2);
-    mc_F8 <= (clk3 and GP_22) or (not GP_22 and SD_DAT(0));
+    mc_F8 <= (GP_22) or (not GP_22 and SD_DAT(0));
     mc_F10 <= not GP_22 and SD_DAT(1);
     mc_F12 <= GP_22 or SD_DAT(2);
     mc_F13 <= GP_22 or SD_DAT(3);
@@ -605,9 +512,12 @@ begin
 
     process(GP_NWR)
     begin
-        if falling_edge(GP_NWR) then
+        if rising_edge(GP_NWR) then
+            -- mc_G1 和 mc_G2 总是更新
             mc_G1 <= not GP(0) and GP(1) and not GP(2) and GP(3) and GP(4) and not GP(5) and GP(6) and not GP(7) and GP(8) and not GP(9) and GP(10) and not GP(11) and mc_C13;
             mc_G2 <= not GP(0) and GP(1) and not GP(2) and GP(3) and GP(4) and not GP(5) and GP(6) and not GP(7) and GP(8) and not GP(9) and GP(10) and not GP(11) and MAGICADDR;
+            
+            -- WRITEENABLE 和 mc_G14 只有在 LOAD_IREG='1' 时才更新 (Clock Enable)
             if LOAD_IREG = '1' then
                 WRITEENABLE <= GP(2);
                 mc_G14 <= GP(7) and not GP(10) and GP(11);
@@ -615,6 +525,12 @@ begin
         end if;
     end process;
     SRAM_A16 <= WRITEENABLE;
+    GP_NCS2 <= GP_NCS2_EXT; -- 直接连接外部NCS2信号
+    FLASH_HIGH(0) <= GP_21; -- Flash高位地址线0
+    FLASH_HIGH(1) <= GP_22; -- Flash高位地址线1
+    FLASH_HIGH(2) <= GP_23; -- Flash高位地址线2
+    FLASH_HIGH(3) <= '0'; -- Flash高位地址线3 (硬编码为低电平)
+    FLASH_HIGH(4) <= '0'; -- Flash高位地址线4 (硬编码为低电平)
 
     mc_G4 <= GP_22 or mc_F14;
     mc_G6 <= GP_22 or mc_F1;
