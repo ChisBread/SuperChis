@@ -113,7 +113,7 @@ architecture behavioral of superchis is
     -- DDR Address and Control Registers / DDR地址和控制寄存器
     signal ddr_addr_reg : std_logic_vector(12 downto 0) := (others => '0');
     signal ddr_ba_reg   : std_logic_vector(1 downto 0) := (others => '0');
-    signal ddr_cke_reg  : std_logic := '0';
+    signal ddr_cke_reg  : std_logic := '1';
     signal ddr_ras_reg  : std_logic := '1';
     signal ddr_cas_reg  : std_logic := '1';
     signal ddr_we_reg   : std_logic := '1';
@@ -135,8 +135,8 @@ architecture behavioral of superchis is
     signal address_load       : std_logic := '0';           -- Latched signal indicating address phase / 标志地址阶段的锁存信号
     signal address_load_sync  : std_logic := '0';           -- First stage sync (original: mc_H10) / 第一级同步
     signal address_load_sync2 : std_logic := '0';           -- Second stage sync (original: mc_H5) / 第二级同步
-    signal gba_bus_idle_sync_d1       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
-    signal gba_bus_idle_sync       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
+    signal gba_bus_idle_sync_d1       : std_logic := '1';           -- Timing sync stage (original: mc_H14) / 时序同步级
+    signal gba_bus_idle_sync       : std_logic := '1';           -- Timing sync stage (original: mc_H15) / 时序同步级
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
     
     -- SD Interface - Simplified GPIO Mapping Signals / SD接口 - 简化GPIO映射信号
@@ -380,9 +380,20 @@ begin
     ddr_controller: process(CLK50MHz)
     begin
         if rising_edge(CLK50MHz) then
+            -- read_sync  <= GP_NRD;
+            
+            -- Address load synchronization chain (original: mc_H10 -> mc_H5)
+            -- 地址加载同步链
+            address_load_sync2 <= address_load_sync;
+            address_load_sync <= address_load;
+            
+            -- Timing synchronization stages (original: mc_H14, mc_H15)
+            -- 时序同步级
+            gba_bus_idle_sync_d1 <= gba_bus_idle_sync;
+            gba_bus_idle_sync <= GP_NWR and GP_NRD;
+            
             if config_map_reg = '1' then  -- DDR模式
                 ddr_cke_reg <= '1';  -- 时钟始终使能
-                
                 -- 刷新优先级最高
                 if ddr_need_refresh = '1' and GP_NCS = '1' then
                     -- AUTO REFRESH命令 (只在总线空闲时执行)
@@ -392,44 +403,27 @@ begin
                     ddr_addr_reg <= (others => '0');
                     ddr_ba_reg <= (others => '0');
                 elsif GP_NCS = '0' then  -- GBA访问期间
-                    if GP_NRD = '0' then
+                    if gba_bus_idle_sync  = '0' then
                         -- READ命令
                         ddr_ras_reg <= '1';  -- RAS高电平
                         ddr_cas_reg <= '0';  -- CAS低电平
-                        ddr_we_reg  <= '1';  -- WE高电平
-                        -- 列地址
-                        ddr_addr_reg(12) <= '0';
-                        ddr_addr_reg(11) <= '0';
-                        ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
-                        ddr_addr_reg(9)  <= '0';
-                        ddr_addr_reg(8)  <= internal_address(8);
-                        ddr_addr_reg(7)  <= internal_address(7);
-                        ddr_addr_reg(6)  <= internal_address(6);
-                        ddr_addr_reg(5)  <= internal_address(5);
-                        ddr_addr_reg(4)  <= internal_address(4);
-                        ddr_addr_reg(3)  <= internal_address(3);
-                        ddr_addr_reg(2)  <= internal_address(2);
-                        ddr_addr_reg(1)  <= internal_address(1);
-                        ddr_addr_reg(0)  <= internal_address(0);
-                    elsif GP_NWR = '0' then
-                        -- WRITE命令
-                        ddr_ras_reg <= '1';  -- RAS高电平
-                        ddr_cas_reg <= '0';  -- CAS低电平
-                        ddr_we_reg  <= '0';  -- WE低电平
-                        -- 列地址
-                        ddr_addr_reg(12) <= '0';
-                        ddr_addr_reg(11) <= '0';
-                        ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
-                        ddr_addr_reg(9)  <= '0';
-                        ddr_addr_reg(8)  <= internal_address(8);
-                        ddr_addr_reg(7)  <= internal_address(7);
-                        ddr_addr_reg(6)  <= internal_address(6);
-                        ddr_addr_reg(5)  <= internal_address(5);
-                        ddr_addr_reg(4)  <= internal_address(4);
-                        ddr_addr_reg(3)  <= internal_address(3);
-                        ddr_addr_reg(2)  <= internal_address(2);
-                        ddr_addr_reg(1)  <= internal_address(1);
-                        ddr_addr_reg(0)  <= internal_address(0);
+                        ddr_we_reg  <= GP_NWR;  -- WE高电平
+                        if gba_bus_idle_sync_d1 = '1' then
+                            -- 列地址
+                            ddr_addr_reg(12) <= '0';
+                            ddr_addr_reg(11) <= '0';
+                            ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
+                            ddr_addr_reg(9)  <= '0';
+                            ddr_addr_reg(8)  <= internal_address(8);
+                            ddr_addr_reg(7)  <= internal_address(7);
+                            ddr_addr_reg(6)  <= internal_address(6);
+                            ddr_addr_reg(5)  <= internal_address(5);
+                            ddr_addr_reg(4)  <= internal_address(4);
+                            ddr_addr_reg(3)  <= internal_address(3);
+                            ddr_addr_reg(2)  <= internal_address(2);
+                            ddr_addr_reg(1)  <= internal_address(1);
+                            ddr_addr_reg(0)  <= internal_address(0);
+                        end if;
                     else
                         -- ACTIVE命令 (地址阶段)
                         ddr_ras_reg <= '0';  -- RAS低电平
@@ -462,13 +456,26 @@ begin
                     ddr_ba_reg <= (others => '0');
                 end if;
             else
-                -- 非DDR模式，禁用DDR
-                ddr_cke_reg  <= '0';
-                ddr_ras_reg <= '1';
-                ddr_cas_reg <= '1';
-                ddr_we_reg  <= '1';
-                ddr_addr_reg <= (others => '0');
-                ddr_ba_reg <= (others => '0');
+                -- 非DDR模式时保持DDR初始化状态和刷新
+                -- Keep DDR in initialized state and refreshed during non-DDR modes
+                ddr_cke_reg  <= '1';  -- 保持时钟使能，维持DDR初始化状态
+                
+                -- 在非DDR模式下仍然执行刷新操作
+                if ddr_need_refresh = '1' then
+                    -- AUTO REFRESH命令
+                    ddr_ras_reg <= '0';  -- RAS低电平
+                    ddr_cas_reg <= '0';  -- CAS低电平
+                    ddr_we_reg  <= '1';  -- WE高电平
+                    ddr_addr_reg <= (others => '0');
+                    ddr_ba_reg <= (others => '0');
+                else
+                    -- 空闲状态，NOP命令
+                    ddr_ras_reg <= '1';
+                    ddr_cas_reg <= '1';
+                    ddr_we_reg  <= '1';
+                    ddr_addr_reg <= (others => '0');
+                    ddr_ba_reg <= (others => '0');
+                end if;
             end if;
         end if;
     end process;
@@ -500,28 +507,6 @@ begin
     -- SD I/O模式检测
     
     sd_output_enable <= GP_NCS or not GP_23 or not config_sd_enable or magic_address;
-    -- ========================================================================
-    -- Read/Write Enable Synchronization / 读写信号同步
-    -- Synchronizes GBA bus signals to the internal 50MHz clock to prevent metastability.
-    -- 将GBA总线信号同步到内部50MHz时钟，以防止亚稳态问题。
-    -- ========================================================================
-    
-    process(CLK50MHz)
-    begin
-        if rising_edge(CLK50MHz) then
-            -- read_sync  <= GP_NRD;
-            
-            -- Address load synchronization chain (original: mc_H10 -> mc_H5)
-            -- 地址加载同步链
-            address_load_sync <= address_load;
-            address_load_sync2 <= address_load_sync;
-            
-            -- Timing synchronization stages (original: mc_H14, mc_H15)
-            -- 时序同步级
-            gba_bus_idle_sync <= GP_NWR and GP_NRD;
-            gba_bus_idle_sync_d1 <= gba_bus_idle_sync;
-        end if;
-    end process;
     
     -- Pass through GBA R/W signals to Flash/SRAM directly.
     -- 将GBA的读写信号直接透传给Flash/SRAM。
