@@ -110,6 +110,14 @@ architecture behavioral of superchis is
     -- DDR Control Signals / DDR控制信号
     signal ddr_need_refresh : std_logic := '0';
     
+    -- DDR Address and Control Registers / DDR地址和控制寄存器
+    signal ddr_addr_reg : std_logic_vector(12 downto 0) := (others => '0');
+    signal ddr_ba_reg   : std_logic_vector(1 downto 0) := (others => '0');
+    signal ddr_cke_reg  : std_logic := '0';
+    signal ddr_ras_reg  : std_logic := '1';
+    signal ddr_cas_reg  : std_logic := '1';
+    signal ddr_we_reg   : std_logic := '1';
+    
     -- DDR chip select signal
     signal n_ddr_sel : std_logic := '1';  -- DDR not selected (active low)
     
@@ -391,114 +399,118 @@ begin
     end process;
     
     -- ========================================================================
-    -- DDR SDRAM Controller - 简化的组合逻辑设计
-    -- DDR SDRAM Controller - Simplified Combinational Logic Design
-    -- 直接使用GBA信号驱动DDR，避免复杂的状态机
-    -- Direct GBA signal driven DDR to avoid complex state machine
+    -- DDR SDRAM Controller - 时钟同步的寄存器输出设计
+    -- DDR SDRAM Controller - Clock-synchronized register output design
+    -- 使用50MHz时钟同步所有DDR输出，避免组合逻辑的不稳定性
+    -- Use 50MHz clock to synchronize all DDR outputs, avoiding combinational logic instability
     -- ========================================================================
 
-    -- DDR命令生成 (包含刷新逻辑)
-    -- DDR Command Generation (Including refresh logic)
-    process(config_map_reg, GP_NCS, GP_NRD, GP_NWR, ddr_need_refresh)
+    -- DDR控制器主进程 - 50MHz时钟同步
+    -- DDR Controller Main Process - 50MHz clock synchronized
+    ddr_controller: process(CLK50MHz)
     begin
-        if config_map_reg = '1' then  -- DDR模式
-            DDR_CKE <= '1';  -- 时钟始终使能
-            
-            -- 刷新优先级最高
-            if ddr_need_refresh = '1' and GP_NCS = '1' then
-                -- AUTO REFRESH命令 (只在总线空闲时执行)
-                DDR_NRAS <= '0';  -- RAS低电平
-                DDR_NCAS <= '0';  -- CAS低电平
-                DDR_NWE  <= '1';  -- WE高电平
-            elsif GP_NCS = '0' then  -- GBA访问期间
-                if GP_NRD = '0' then
-                    -- READ命令
-                    DDR_NRAS <= '1';  -- RAS高电平
-                    DDR_NCAS <= '0';  -- CAS低电平
-                    DDR_NWE  <= '1';  -- WE高电平
-                elsif GP_NWR = '0' then
-                    -- WRITE命令
-                    DDR_NRAS <= '1';  -- RAS高电平
-                    DDR_NCAS <= '0';  -- CAS低电平
-                    DDR_NWE  <= '0';  -- WE低电平
+        if rising_edge(CLK50MHz) then
+            if config_map_reg = '1' then  -- DDR模式
+                ddr_cke_reg <= '1';  -- 时钟始终使能
+                
+                -- 刷新优先级最高
+                if ddr_need_refresh = '1' and GP_NCS = '1' then
+                    -- AUTO REFRESH命令 (只在总线空闲时执行)
+                    ddr_ras_reg <= '0';  -- RAS低电平
+                    ddr_cas_reg <= '0';  -- CAS低电平
+                    ddr_we_reg  <= '1';  -- WE高电平
+                    ddr_addr_reg <= (others => '0');
+                    ddr_ba_reg <= (others => '0');
+                elsif GP_NCS = '0' then  -- GBA访问期间
+                    if GP_NRD = '0' then
+                        -- READ命令
+                        ddr_ras_reg <= '1';  -- RAS高电平
+                        ddr_cas_reg <= '0';  -- CAS低电平
+                        ddr_we_reg  <= '1';  -- WE高电平
+                        -- 列地址
+                        ddr_addr_reg(12) <= '0';
+                        ddr_addr_reg(11) <= '0';
+                        ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
+                        ddr_addr_reg(9)  <= '0';
+                        ddr_addr_reg(8)  <= internal_address(8);
+                        ddr_addr_reg(7)  <= internal_address(7);
+                        ddr_addr_reg(6)  <= internal_address(6);
+                        ddr_addr_reg(5)  <= internal_address(5);
+                        ddr_addr_reg(4)  <= internal_address(4);
+                        ddr_addr_reg(3)  <= internal_address(3);
+                        ddr_addr_reg(2)  <= internal_address(2);
+                        ddr_addr_reg(1)  <= internal_address(1);
+                        ddr_addr_reg(0)  <= internal_address(0);
+                    elsif GP_NWR = '0' then
+                        -- WRITE命令
+                        ddr_ras_reg <= '1';  -- RAS高电平
+                        ddr_cas_reg <= '0';  -- CAS低电平
+                        ddr_we_reg  <= '0';  -- WE低电平
+                        -- 列地址
+                        ddr_addr_reg(12) <= '0';
+                        ddr_addr_reg(11) <= '0';
+                        ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
+                        ddr_addr_reg(9)  <= '0';
+                        ddr_addr_reg(8)  <= internal_address(8);
+                        ddr_addr_reg(7)  <= internal_address(7);
+                        ddr_addr_reg(6)  <= internal_address(6);
+                        ddr_addr_reg(5)  <= internal_address(5);
+                        ddr_addr_reg(4)  <= internal_address(4);
+                        ddr_addr_reg(3)  <= internal_address(3);
+                        ddr_addr_reg(2)  <= internal_address(2);
+                        ddr_addr_reg(1)  <= internal_address(1);
+                        ddr_addr_reg(0)  <= internal_address(0);
+                    else
+                        -- ACTIVE命令 (地址阶段)
+                        ddr_ras_reg <= '0';  -- RAS低电平
+                        ddr_cas_reg <= '1';  -- CAS高电平
+                        ddr_we_reg  <= '1';  -- WE高电平
+                        -- 行地址
+                        ddr_addr_reg(12) <= GP_21;
+                        ddr_addr_reg(11) <= GP_20;
+                        ddr_addr_reg(10) <= GP_19;
+                        ddr_addr_reg(9)  <= GP_18;
+                        ddr_addr_reg(8)  <= GP_17;
+                        ddr_addr_reg(7)  <= GP_16;
+                        ddr_addr_reg(6)  <= internal_address(15);
+                        ddr_addr_reg(5)  <= internal_address(14);
+                        ddr_addr_reg(4)  <= internal_address(13);
+                        ddr_addr_reg(3)  <= internal_address(12);
+                        ddr_addr_reg(2)  <= internal_address(11);
+                        ddr_addr_reg(1)  <= internal_address(10);
+                        ddr_addr_reg(0)  <= internal_address(9);
+                    end if;
+                    -- Bank地址使用最高位
+                    ddr_ba_reg(1) <= GP_23;
+                    ddr_ba_reg(0) <= GP_22;
                 else
-                    -- ACTIVE命令 (地址阶段)
-                    DDR_NRAS <= '0';  -- RAS低电平
-                    DDR_NCAS <= '1';  -- CAS高电平
-                    DDR_NWE  <= '1';  -- WE高电平
+                    -- 空闲状态，NOP命令
+                    ddr_ras_reg <= '1';
+                    ddr_cas_reg <= '1';
+                    ddr_we_reg  <= '1';
+                    ddr_addr_reg <= (others => '0');
+                    ddr_ba_reg <= (others => '0');
                 end if;
             else
-                -- 空闲状态，NOP命令
-                DDR_NRAS <= '1';
-                DDR_NCAS <= '1';
-                DDR_NWE  <= '1';
+                -- 非DDR模式，禁用DDR
+                ddr_cke_reg  <= '0';
+                ddr_ras_reg <= '1';
+                ddr_cas_reg <= '1';
+                ddr_we_reg  <= '1';
+                ddr_addr_reg <= (others => '0');
+                ddr_ba_reg <= (others => '0');
             end if;
-        else
-            -- 非DDR模式，禁用DDR
-            DDR_CKE  <= '0';
-            DDR_NRAS <= '1';
-            DDR_NCAS <= '1';
-            DDR_NWE  <= '1';
         end if;
     end process;
     
-    -- DDR刷新地址生成 (刷新时使用)
-    -- DDR Refresh Address Generation (Used during refresh)
-    process(ddr_need_refresh, config_map_reg, GP_NCS, GP_NRD, GP_NWR, GP_23, GP_22, GP_21, GP_20, GP_19, GP_18, GP_17, GP_16, internal_address)
-    begin
-        if config_map_reg = '1' then
-            -- 刷新优先级最高
-            if ddr_need_refresh = '1' and GP_NCS = '1' then
-                -- 刷新期间地址无关紧要，设为0
-                DDR_A <= (others => '0');
-                DDR_BA <= (others => '0');
-            elsif GP_NCS = '0' then
-                -- 正常访问期间使用之前的地址映射
-                if GP_NRD = '0' or GP_NWR = '0' then
-                    -- 读写访问时，使用列地址
-                    DDR_A(12) <= '0';
-                    DDR_A(11) <= '0';
-                    DDR_A(10) <= '0';  -- A10=0表示非auto-precharge
-                    DDR_A(9)  <= '0';
-                    DDR_A(8)  <= internal_address(8);
-                    DDR_A(7)  <= internal_address(7);
-                    DDR_A(6)  <= internal_address(6);
-                    DDR_A(5)  <= internal_address(5);
-                    DDR_A(4)  <= internal_address(4);
-                    DDR_A(3)  <= internal_address(3);
-                    DDR_A(2)  <= internal_address(2);
-                    DDR_A(1)  <= internal_address(1);
-                    DDR_A(0)  <= internal_address(0);
-                else
-                    -- 地址阶段，使用行地址
-                    DDR_A(12) <= GP_21;
-                    DDR_A(11) <= GP_20;
-                    DDR_A(10) <= GP_19;
-                    DDR_A(9)  <= GP_18;
-                    DDR_A(8)  <= GP_17;
-                    DDR_A(7)  <= GP_16;
-                    DDR_A(6)  <= internal_address(15);
-                    DDR_A(5)  <= internal_address(14);
-                    DDR_A(4)  <= internal_address(13);
-                    DDR_A(3)  <= internal_address(12);
-                    DDR_A(2)  <= internal_address(11);
-                    DDR_A(1)  <= internal_address(10);
-                    DDR_A(0)  <= internal_address(9);
-                end if;
-                -- Bank地址使用最高位
-                DDR_BA(1) <= GP_23;
-                DDR_BA(0) <= GP_22;
-            else
-                -- 空闲状态，地址为0
-                DDR_A <= (others => '0');
-                DDR_BA <= (others => '0');
-            end if;
-        else
-            -- 非DDR模式，地址为0
-            DDR_A <= (others => '0');
-            DDR_BA <= (others => '0');
-        end if;
-    end process;
+    -- 将寄存器输出连接到DDR接口
+    -- Connect register outputs to DDR interface
+    DDR_A    <= ddr_addr_reg;
+    DDR_BA   <= ddr_ba_reg;
+    DDR_CKE  <= ddr_cke_reg;
+    DDR_NRAS <= ddr_ras_reg;
+    DDR_NCAS <= ddr_cas_reg;
+    DDR_NWE  <= ddr_we_reg;
 
     -- ========================================================================
     -- Chip Enable Generation / 片选信号生成
