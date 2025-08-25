@@ -99,39 +99,20 @@ architecture behavioral of superchis is
     -- Logic to detect the specific address/data sequence to unlock configuration. / 用于检测特定地址/数据序列以解锁配置功能的逻辑。
     signal magic_address      : std_logic := '0';          -- Detects access to the magic address (0x09FFFFFE) / 检测是否访问魔术地址
     signal magic_value_match  : std_logic := '0';          -- Detects the magic value (0xA55A) on the data bus / 检测总线上是否出现魔术值
-    signal config_load_enable : std_logic := '0';          -- Enable signal for loading configuration / 配置加载使能信号
     signal magic_write_count  : unsigned(1 downto 0) := "00"; -- Counts the magic value writes (requires 2) / 对魔术值写入次数进行计数 (需要2次)
     
     -- Address Management / 地址管理
     signal internal_address   : unsigned(15 downto 0) := (others => '0');  -- Internal 16-bit address counter / 内部16位地址计数器
     signal flash_address      : std_logic_vector(15 downto 0);  -- Address bus going to the Flash chip / 连接到Flash芯片的地址总线
-    -- DDR地址和控制信号 / DDR address and control signals
-    signal ddr_address        : std_logic_vector(12 downto 0) := (others => '0'); -- DDR地址总线
-    signal ddr_bank_address   : std_logic_vector(1 downto 0) := (others => '0');  -- DDR Bank地址
     
+    -- 50MHz Clock Driven DDR Control Signals / 50MHz时钟驱动的DDR控制信号
+    signal refresh_counter : unsigned(11 downto 0) := (others => '0'); -- 刷新计数器
     -- DDR Control Signals / DDR控制信号
-    
-    -- DDR State Machine (New Implementation)
-    type ddr_state_t is (
-        DDR_IDLE,           -- 空闲状态
-        DDR_ROW_ACTIVE,     -- 行激活
-        DDR_COLUMN_ACCESS,  -- 列访问
-        DDR_PRECHARGE,      -- 预充电
-        DDR_REFRESH         -- 刷新
-    );
-    
-    signal ddr_state : ddr_state_t := DDR_IDLE;
-    signal ddr_timer : unsigned(3 downto 0) := (others => '0');
     signal ddr_need_refresh : std_logic := '0';
     
     -- DDR chip select signal
     signal n_ddr_sel : std_logic := '1';  -- DDR not selected (active low)
     
-    -- Minimal legacy signals still needed for compatibility
-    signal mc_H0, mc_E3 : std_logic := '0';  -- Synchronization signals
-    
-    -- 50MHz Clock Driven DDR Control Signals / 50MHz时钟驱动的DDR控制信号
-    signal refresh_counter : unsigned(11 downto 0) := (others => '0'); -- 刷新计数器
     
     -- Access Control / 访问控制
     signal current_mode       : access_mode_t := MODE_FLASH; -- Current top-level access mode / 当前顶层访问模式
@@ -146,8 +127,6 @@ architecture behavioral of superchis is
     signal address_load       : std_logic := '0';           -- Latched signal indicating address phase / 标志地址阶段的锁存信号
     signal address_load_sync  : std_logic := '0';           -- First stage sync (original: mc_H10) / 第一级同步
     signal address_load_sync2 : std_logic := '0';           -- Second stage sync (original: mc_H5) / 第二级同步
-    -- signal read_sync          : std_logic;                  -- Synchronized GP_NRD (original: mc_H0)
-    signal write_enable_sync  : std_logic;                  -- Synchronized write enable logic (original: mc_E3)
     signal gba_bus_idle_sync_d1       : std_logic := '0';           -- Timing sync stage (original: mc_H14) / 时序同步级
     signal gba_bus_idle_sync       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
@@ -388,18 +367,6 @@ begin
     -- DDR Chip Select Logic (from original mc_E4)
     -- DDR片选逻辑 (来自原始 mc_E4)
     n_ddr_sel <= GP_NCS or not config_map_reg or (config_sd_enable and GP_23);
-
-    -- 同步信号生成 (基于原始CPLD)
-    -- Synchronization signal generation (based on original CPLD)
-    process(CLK50MHz)
-    begin
-        if rising_edge(CLK50MHz) then
-            mc_H0 <= not GP_NRD;  -- 读信号同步
-        end if;
-    end process;
-    
-    -- 写使能信号生成
-    mc_E3 <= not GP_NWR and config_write_enable;
     
     -- ========================================================================
     -- New DDR SDRAM Controller - GBA Synchronized Design
@@ -416,8 +383,8 @@ begin
                 ddr_need_refresh <= '1';
             end if;
             
-            -- 清除刷新请求(当DDR进入刷新状态时)
-            if ddr_state = DDR_REFRESH then
+            -- 清除刷新请求, 一次刷新持续tRC_CYCLES
+            if ddr_need_refresh = '1' and refresh_counter >= tRC_CYCLES then
                 ddr_need_refresh <= '0';
             end if;
         end if;
@@ -492,16 +459,16 @@ begin
                     DDR_A(12) <= '0';
                     DDR_A(11) <= '0';
                     DDR_A(10) <= '0';  -- A10=0表示非auto-precharge
-                    DDR_A(9)  <= internal_address(8);
-                    DDR_A(8)  <= internal_address(7);
-                    DDR_A(7)  <= internal_address(6);
-                    DDR_A(6)  <= internal_address(5);
-                    DDR_A(5)  <= internal_address(4);
-                    DDR_A(4)  <= internal_address(3);
-                    DDR_A(3)  <= internal_address(2);
-                    DDR_A(2)  <= internal_address(1);
-                    DDR_A(1)  <= internal_address(0);
-                    DDR_A(0)  <= '0';  -- 最低位固定为0(16位字地址)
+                    DDR_A(9)  <= '0';
+                    DDR_A(8)  <= internal_address(8);
+                    DDR_A(7)  <= internal_address(7);
+                    DDR_A(6)  <= internal_address(6);
+                    DDR_A(5)  <= internal_address(5);
+                    DDR_A(4)  <= internal_address(4);
+                    DDR_A(3)  <= internal_address(3);
+                    DDR_A(2)  <= internal_address(2);
+                    DDR_A(1)  <= internal_address(1);
+                    DDR_A(0)  <= internal_address(0);
                 else
                     -- 地址阶段，使用行地址
                     DDR_A(12) <= GP_21;
