@@ -113,7 +113,7 @@ architecture behavioral of superchis is
     -- DDR Address and Control Registers / DDR地址和控制寄存器
     signal ddr_addr_reg : std_logic_vector(12 downto 0) := (others => '0');
     signal ddr_ba_reg   : std_logic_vector(1 downto 0) := (others => '0');
-    signal ddr_cke_reg  : std_logic := '1';
+    signal ddr_cke_reg  : std_logic := '0';
     signal ddr_ras_reg  : std_logic := '1';
     signal ddr_cas_reg  : std_logic := '1';
     signal ddr_we_reg   : std_logic := '1';
@@ -170,9 +170,6 @@ begin
             current_mode <= MODE_FLASH;
         end if;
     end process;
-    
-    -- DDR selection signal (active low) / DDR选择信号 (低电平有效)
-    n_ddr_sel <= not config_map_reg;
 
     -- ========================================================================
     -- Magic Address Detection and Configuration / 魔术地址检测与配置
@@ -355,6 +352,7 @@ begin
     ddr_refresh_counter: process(CLK50MHz)
     begin
         if rising_edge(CLK50MHz) then
+            -- 刷新控制逻辑 / Refresh control logic
             refresh_counter <= refresh_counter + 1;
             if refresh_counter >= REFRESH_INTERVAL then
                 refresh_counter <= (others => '0');
@@ -394,15 +392,14 @@ begin
             
             if config_map_reg = '1' then  -- DDR模式
                 ddr_cke_reg <= '1';  -- 时钟始终使能
-                -- 刷新优先级最高
-                if ddr_need_refresh = '1' and GP_NCS = '1' then
+                if ddr_need_refresh = '1' and (n_ddr_sel = '1' or (gba_bus_idle_sync = '1' and address_load_sync = '0')) then
                     -- AUTO REFRESH命令 (只在总线空闲时执行)
                     ddr_ras_reg <= '0';  -- RAS低电平
                     ddr_cas_reg <= '0';  -- CAS低电平
                     ddr_we_reg  <= '1';  -- WE高电平
                     ddr_addr_reg <= (others => '0');
                     ddr_ba_reg <= (others => '0');
-                elsif GP_NCS = '0' then  -- GBA访问期间
+                elsif n_ddr_sel = '0' then  -- GBA访问期间
                     if gba_bus_idle_sync  = '0' then
                         -- READ命令
                         ddr_ras_reg <= '1';  -- RAS高电平
@@ -412,7 +409,7 @@ begin
                             -- 列地址
                             ddr_addr_reg(12) <= '0';
                             ddr_addr_reg(11) <= '0';
-                            ddr_addr_reg(10) <= '0';  -- A10=0表示非auto-precharge
+                            ddr_addr_reg(10) <= '0';  -- A10=0表示不auto-precharge
                             ddr_addr_reg(9)  <= '0';
                             ddr_addr_reg(8)  <= internal_address(8);
                             ddr_addr_reg(7)  <= internal_address(7);
@@ -456,26 +453,12 @@ begin
                     ddr_ba_reg <= (others => '0');
                 end if;
             else
-                -- 非DDR模式时保持DDR初始化状态和刷新
-                -- Keep DDR in initialized state and refreshed during non-DDR modes
-                ddr_cke_reg  <= '1';  -- 保持时钟使能，维持DDR初始化状态
-                
-                -- 在非DDR模式下仍然执行刷新操作
-                if ddr_need_refresh = '1' then
-                    -- AUTO REFRESH命令
-                    ddr_ras_reg <= '0';  -- RAS低电平
-                    ddr_cas_reg <= '0';  -- CAS低电平
-                    ddr_we_reg  <= '1';  -- WE高电平
-                    ddr_addr_reg <= (others => '0');
-                    ddr_ba_reg <= (others => '0');
-                else
-                    -- 空闲状态，NOP命令
-                    ddr_ras_reg <= '1';
-                    ddr_cas_reg <= '1';
-                    ddr_we_reg  <= '1';
-                    ddr_addr_reg <= (others => '0');
-                    ddr_ba_reg <= (others => '0');
-                end if;
+                -- 空闲状态，NOP命令
+                ddr_ras_reg <= '1';
+                ddr_cas_reg <= '1';
+                ddr_we_reg  <= '1';
+                ddr_addr_reg <= (others => '0');
+                ddr_ba_reg <= (others => '0');
             end if;
         end if;
     end process;
