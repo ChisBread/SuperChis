@@ -139,45 +139,15 @@ architecture behavioral of superchis is
     signal gba_bus_idle_sync       : std_logic := '0';           -- Timing sync stage (original: mc_H15) / 时序同步级
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
     
-    -- SD Card Signals / SD卡信号
-    signal sd_cmd_out         : std_logic := '1';           -- Data to be driven on the SD_CMD line / 驱动到SD_CMD线上的数据
-    signal sd_data_out        : std_logic_vector(3 downto 0) := (others => '1'); -- Data to be driven on the SD_DAT lines(original: mc_H3, H13, H7, H6) / 驱动到SD_DAT线上的数据
-    signal sd_cmd_oe          : std_logic := '0';           -- Output enable for the SD_CMD line / SD_CMD线的输出使能
-    signal sd_data_oe         : std_logic_vector(3 downto 0) := (others => '0'); -- Output enable for the SD_DAT lines / SD_DAT线的输出使能
-    
-    -- SD Card State Signals (Reconstructed from original macrocells) / SD卡状态信号 (对原始宏单元的重构)
-    -- Note: The naming convention is descriptive, with original macrocell names in comments for cross-reference.
-    -- 注意：命名约定是描述性的，并在注释中保留了原始宏单元名称，以便于交叉引用。
-    
-    -- State Latches (D-FFs) / 状态锁存器 (D型触发器)
-    signal sd_cmd_state  : std_logic := '0'; -- Holds the current state for the CMD line output. (Original: mc_E13)
-    signal sd_dat1_state : std_logic := '0'; -- Holds the state for DAT1 line logic. (Original: mc_F5)
-    signal sd_dat2_state : std_logic := '0'; -- Holds the state for DAT2 line logic. (Original: mc_E0)
-    signal sd_dat3_state : std_logic := '0'; -- Holds the state for DAT3 line logic. (Original: mc_E2)
-    
-    -- Toggle Flip-Flops (T-FFs) for State Control / 用于状态控制的T型触发器
-    signal sd_cmd_toggle  : std_logic := '0'; -- T-FF for CMD state transition. (Original: mc_F7)
-    signal sd_dat1_toggle : std_logic := '0'; -- T-FF for DAT1 state transition. (Original: mc_F9)
-    signal sd_dat2_toggle : std_logic := '0'; -- T-FF for DAT2 state transition. (Original: mc_F11)
-    signal sd_dat3_toggle : std_logic := '0'; -- T-FF for DAT3 state transition. (Original: mc_E15)
-
-    -- Toggle Flip-Flops (T-FFs) for Feedback Path / 用于反馈路径的T型触发器
-    signal sd_dat0_feedback_toggle : std_logic := '0'; -- T-FF for feedback from SD_DAT(0). (Original: mc_F14)
-    signal sd_dat1_feedback_toggle : std_logic := '0'; -- T-FF for feedback from SD_DAT(1). (Original: mc_F15)
-    signal sd_dat2_feedback_toggle : std_logic := '0'; -- T-FF for feedback from SD_DAT(2). (Original: mc_F0)
-    signal sd_dat3_feedback_toggle : std_logic := '0'; -- T-FF for feedback from SD_DAT(3). (Original: mc_F1)
-
-    -- SD Card Output Data Buffers / SD卡输出数据缓冲
-    signal sd_cmd_out_data      : std_logic; -- Data for SD_CMD output. (Original: mc_H8)
-    signal sd_dat0_out_data     : std_logic; -- Data for SD_DAT(0) output. (Original: mc_H3)
-    signal sd_dat1_out_data     : std_logic; -- Data for SD_DAT(1) output. (Original: mc_H13)
-    signal sd_dat2_out_data     : std_logic; -- Data for SD_DAT(2) output. (Original: mc_H7)
-    signal sd_dat3_out_data     : std_logic; -- Data for SD_DAT(3) output. (Original: mc_H6)
-    signal sd_common_out_logic  : std_logic; -- Shared logic for CMD and DAT3 outputs. (Original: mc_H9)
-    
-    -- Internal SD control signals / SD内部控制信号
-    signal sd_mode_active : std_logic; -- High when SD card I/O is selected and active.
-    signal sd_write_active: std_logic; -- High during a GBA write cycle to the SD interface.
+    -- SD Interface - Simplified GPIO Mapping Signals / SD接口 - 简化GPIO映射信号
+    signal sd_clk_out         : std_logic := '0';           -- SD clock output register / SD时钟输出寄存器
+    signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
+    signal sd_dat_out     : std_logic_vector(3 downto 0) := (others => '1'); -- SD DAT output register / SD DAT输出寄存器
+    signal sd_cmd_oe      : std_logic := '0';           -- SD CMD output enable register / SD CMD输出使能寄存器
+    signal sd_dat_oe      : std_logic_vector(3 downto 0) := (others => '0'); -- SD DAT output enable register / SD DAT输出使能寄存器
+    signal sd_mode_active     : std_logic;                   -- SD mode active flag / SD模式激活标志
+    signal sd_write_active    : std_logic;                   -- SD write operation active / SD写操作激活
+    signal sd_read_active     : std_logic;                   -- SD read operation active / SD读操作激活
 
 begin
 
@@ -526,10 +496,9 @@ begin
     -- 对clk3的依赖不寻常，但忠于原始设计。
     FLASH_NCE <= GP_NCS or config_map_reg or (config_sd_enable and GP_23); -- or clk3
 
-    -- N_SDOUT (SD I/O block enable) is enabled when: GP_NCS is active, SD mode is enabled, and GP_23 is high.
-    -- It is disabled at the magic address to prevent conflicts.
-    -- N_SDOUT (SD I/O模块使能)在以下情况使能: GP_NCS有效, SD模式使能, 且GP_23为高。
-    -- 在魔术地址处该信号被禁用以防止冲突。
+    -- SD I/O mode detection
+    -- SD I/O模式检测
+    
     sd_output_enable <= GP_NCS or not GP_23 or not config_sd_enable or magic_address;
     -- ========================================================================
     -- Read/Write Enable Synchronization / 读写信号同步
@@ -565,279 +534,108 @@ begin
     -- 控制CPLD何时将数据驱动到GBA的GP数据总线上。
     -- ========================================================================
     
-    -- The GP bus is driven only during a GBA read cycle (GP_NRD='0') and when the SD I/O block is active.
-    -- GP总线仅在GBA读周期(GP_NRD='0')且SD I/O模块激活时才由本芯片驱动。
-    gp_output_enable <= '1' when (GP_NRD = '0' and sd_output_enable = '0') else '0';
-    
-    -- GP Bus Data Multiplexing (Reconstructed from original.vhd CPLD equations)
-    -- This process multiplexes various internal SD card states onto the GP data bus during SD read operations.
-    -- The behavior is controlled by GP_22:
-    --  - GP_22 = '0' (Debug Mode): Exposes internal toggle and state flip-flops for debugging.
-    --  - GP_22 = '1' (Data Mode):  Exposes actual SD line data and processed states.
-    gp_bus_mux: process(GP_22, SD_CMD, SD_DAT, sd_cmd_state, sd_dat1_state, sd_dat2_state, sd_dat3_state, 
-                        sd_cmd_toggle, sd_dat1_toggle, sd_dat2_toggle, sd_dat3_toggle, 
-                        sd_dat0_feedback_toggle, sd_dat1_feedback_toggle, sd_dat2_feedback_toggle, sd_dat3_feedback_toggle,
-                        sd_dat0_out_data, sd_dat1_out_data, sd_dat2_out_data)
-    begin
-        -- This logic is a direct, readable translation of the macrocell equations feeding the GP bus drivers.
-        -- Each line corresponds to a specific GP data bit's source logic from original.vhd.
-        if GP_22 = '0' then -- Debug Mode: Output internal FF states
-            gp_output_data(0)  <= sd_cmd_toggle;             -- mc_F7
-            gp_output_data(1)  <= sd_dat1_toggle;            -- mc_F9
-            gp_output_data(2)  <= sd_dat2_toggle;            -- mc_F11
-            gp_output_data(3)  <= sd_dat3_toggle;            -- mc_E15
-            gp_output_data(4)  <= sd_cmd_state;              -- mc_E13
-            gp_output_data(5)  <= sd_dat1_state;             -- mc_F5
-            gp_output_data(6)  <= sd_dat2_state;             -- mc_E0
-            gp_output_data(7)  <= sd_dat3_state;             -- mc_E2
-            gp_output_data(8)  <= SD_DAT(0);                 -- Raw SD_DAT(0) input
-            gp_output_data(9)  <= SD_DAT(1);                 -- Raw SD_DAT(1) input
-            gp_output_data(10) <= SD_DAT(2);                 -- Raw SD_DAT(2) input
-            gp_output_data(11) <= SD_DAT(3);                 -- Raw SD_DAT(3) input
-            gp_output_data(12) <= sd_dat0_feedback_toggle;   -- mc_F14
-            gp_output_data(13) <= sd_dat1_feedback_toggle;   -- mc_F15
-            gp_output_data(14) <= sd_dat2_feedback_toggle;   -- mc_F0
-            gp_output_data(15) <= sd_dat3_feedback_toggle;   -- mc_F1
-        else -- Data Transmission Mode
-            gp_output_data(0)  <= SD_CMD;                    -- Raw SD_CMD input
-            gp_output_data(1)  <= sd_cmd_state;              -- mc_E13
-            gp_output_data(2)  <= sd_dat1_state;             -- mc_F5
-            gp_output_data(3)  <= sd_dat2_state;             -- mc_E0
-            gp_output_data(4)  <= sd_dat3_state;             -- mc_E2
-            gp_output_data(5)  <= sd_dat0_out_data;          -- mc_H3
-            gp_output_data(6)  <= sd_dat1_out_data;          -- mc_H13
-            gp_output_data(7)  <= sd_dat2_out_data;          -- mc_H7
-            gp_output_data(8)  <= '0';                      --  Tied to GND / Raw clk3 input
-            gp_output_data(9)  <= '0';                       -- Tied to GND
-            gp_output_data(10) <= '1';                       -- Tied to VCC
-            gp_output_data(11) <= '1';                       -- Tied to VCC
-            gp_output_data(12) <= '1';                       -- Tied to VCC
-            gp_output_data(13) <= '1';                       -- Tied to VCC
-            gp_output_data(14) <= '1';                       -- Tied to VCC
-            gp_output_data(15) <= '1';                       -- Tied to VCC
-        end if;
-    end process;
-    
+    -- The GP bus is driven during GBA read cycles in SD mode
+    -- GP总线在SD模式的GBA读周期时由本芯片驱动
+    gp_output_enable <= '1' when (GP_NRD = '0' and (current_mode = MODE_SD)) else '0';
+
     -- GP bus tri-state control. Drive the bus when enabled, otherwise high-impedance.
     -- GP总线三态控制。使能时驱动总线，否则为高阻态。
     GP <= gp_output_data when gp_output_enable = '1' else (others => 'Z');
 
     -- ========================================================================
-    -- SD Card Interface (Reconstructed from original.vhd)
-    -- ========================================================================
-    -- This section faithfully reconstructs the complex bit-banging logic for SD card
-    -- communication found in the original CPLD design. It relies on a series of
-    -- state latches (D-FFs) and toggle flip-flops (T-FFs) clocked by GP_NCS.
-    -- The logic is controlled by GBA-side signals like GP_19, GP_22, and
-    -- specific data bits on the GP bus (GP(0)-GP(15)) for control and resets.
-    --
-    -- Key Timing Signals:
-    --   - address_load_sync2:   Latched address phase signal (from mc_H5).
-    --   - gba_bus_idle_sync:    Indicates GBA bus is idle (NRD=1, NWR=1) (from mc_H15).
-    --   - gba_bus_idle_sync_d1: Delayed version of the above (from mc_H14).
-    -- ========================================================================
-
-    -- Process for SD Card State Latches (D-FFs), clocked by GP_NCS.
-    -- This implements the core state machine that determines SD line output values.
-    sd_state_logic: process(GP_NCS)
-    begin
-        if rising_edge(GP_NCS) then
-            -- CMD State (Original: mc_E13)
-            sd_cmd_state <= (sd_cmd_state or address_load_sync2 or not gba_bus_idle_sync_d1)
-                and (GP_22 or sd_cmd_toggle or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(0) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_22 or SD_CMD or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (not GP_19 or sd_cmd_state or not address_load_sync2)
-                and (sd_cmd_state or address_load_sync2 or gba_bus_idle_sync);
-
-            -- DAT1 State (Original: mc_F5)
-            sd_dat1_state <= (not GP_22 or sd_cmd_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP_22 or sd_dat1_toggle or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(1) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or sd_dat1_state or not address_load_sync2)
-                and (sd_dat1_state or address_load_sync2 or gba_bus_idle_sync)
-                and (sd_dat1_state or address_load_sync2 or not gba_bus_idle_sync_d1);
-
-            -- DAT2 State (Original: mc_E0)
-            sd_dat2_state <= (not GP_22 or sd_dat1_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP_22 or sd_dat2_toggle or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(2) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or sd_dat2_state or not address_load_sync2)
-                and (sd_dat2_state or address_load_sync2 or gba_bus_idle_sync)
-                and (sd_dat2_state or address_load_sync2 or not gba_bus_idle_sync_d1);
-
-            -- DAT3 State (Original: mc_E2)
-            sd_dat3_state <= (not GP_22 or sd_dat2_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP_22 or sd_dat3_toggle or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(3) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or sd_dat3_state or not address_load_sync2)
-                and (sd_dat3_state or address_load_sync2 or gba_bus_idle_sync)
-                and (sd_dat3_state or address_load_sync2 or not gba_bus_idle_sync_d1);
-        end if;
-    end process;
-
-    -- Process for SD Card Toggle Flip-Flops (T-FFs), clocked by GP_NCS.
-    -- This implements the complex state transition logic, which often depends on feedback
-    -- from the SD lines themselves, allowing for bit-banging communication protocols.
-    sd_toggle_logic: process(GP_NCS)
-        -- Local variables to hold the calculated toggle condition for each flip-flop.
-        -- This replaces the 'should_toggle' function to resolve signal access errors.
-        variable toggle_cond : std_logic;
-        variable set_cond    : std_logic;
-        variable reset_cond  : std_logic;
-        variable timing_active : std_logic;
-    begin
-        if rising_edge(GP_NCS) then
-            -- This timing window is active during the transition from active R/W to idle bus state.
-            timing_active := not address_load_sync2 and not gba_bus_idle_sync_d1 and gba_bus_idle_sync;
-
-            -- ==================================================================
-            -- Logic for: sd_cmd_toggle (mc_F7)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_cmd_toggle and address_load_sync2) or
-                        (not GP_22 and sd_dat0_feedback_toggle and not sd_cmd_toggle and timing_active) or
-                        (not GP_22 and not sd_dat0_feedback_toggle and sd_cmd_toggle and timing_active);
-            reset_cond := not GP(12) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_cmd_toggle <= sd_cmd_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat1_toggle (mc_F9)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat1_toggle and address_load_sync2) or
-                        (not GP_22 and sd_dat1_feedback_toggle and not sd_dat1_toggle and timing_active) or
-                        (not GP_22 and not sd_dat1_feedback_toggle and sd_dat1_toggle and timing_active);
-            reset_cond := not GP(13) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat1_toggle <= sd_dat1_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat2_toggle (mc_F11)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat2_toggle and address_load_sync2) or
-                        (not GP_22 and sd_dat2_feedback_toggle and not sd_dat2_toggle and timing_active) or
-                        (not GP_22 and not sd_dat2_feedback_toggle and sd_dat2_toggle and timing_active);
-            reset_cond := not GP(14) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat2_toggle <= sd_dat2_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat3_toggle (mc_E15)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat3_toggle and address_load_sync2) or
-                        (not GP_22 and sd_dat3_feedback_toggle and not sd_dat3_toggle and timing_active) or
-                        (not GP_22 and not sd_dat3_feedback_toggle and sd_dat3_toggle and timing_active);
-            reset_cond := not GP(15) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat3_toggle <= sd_dat3_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat0_feedback_toggle (mc_F14)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat0_feedback_toggle and address_load_sync2) or
-                        (not GP_22 and SD_DAT(0) and not sd_dat0_feedback_toggle and timing_active) or
-                        (not GP_22 and not SD_DAT(0) and sd_dat0_feedback_toggle and timing_active);
-            reset_cond := not GP(8) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat0_feedback_toggle <= sd_dat0_feedback_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat1_feedback_toggle (mc_F15)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat1_feedback_toggle and address_load_sync2) or
-                        (not GP_22 and SD_DAT(1) and not sd_dat1_feedback_toggle and timing_active) or
-                        (not GP_22 and not SD_DAT(1) and sd_dat1_feedback_toggle and timing_active);
-            reset_cond := not GP(9) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat1_feedback_toggle <= sd_dat1_feedback_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat2_feedback_toggle (mc_F0)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat2_feedback_toggle and address_load_sync2) or
-                        (not GP_22 and SD_DAT(2) and not sd_dat2_feedback_toggle and timing_active) or
-                        (not GP_22 and not SD_DAT(2) and sd_dat2_feedback_toggle and timing_active);
-            reset_cond := not GP(10) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat2_feedback_toggle <= sd_dat2_feedback_toggle xor toggle_cond;
-
-            -- ==================================================================
-            -- Logic for: sd_dat3_feedback_toggle (mc_F1)
-            -- ==================================================================
-            set_cond := (not GP_19 and not sd_dat3_feedback_toggle and address_load_sync2) or
-                        (not GP_22 and SD_DAT(3) and not sd_dat3_feedback_toggle and timing_active) or
-                        (not GP_22 and not SD_DAT(3) and sd_dat3_feedback_toggle and timing_active);
-            reset_cond := not GP(11) and not GP_19 and address_load_sync2 and not address_load_sync;
-            toggle_cond := set_cond xor reset_cond;
-            sd_dat3_feedback_toggle <= sd_dat3_feedback_toggle xor toggle_cond;
-        end if;
-    end process;
-
-    -- ========================================================================
-    -- SD Interface Physical Layer / SD接口物理层
+    -- SD Card Interface - Simplified GPIO Mapping
+    -- SD卡接口 - 简化的GPIO映射
+    -- 直接将GBA地址/数据位映射到SD卡引脚，简化复杂的状态机逻辑
+    -- Direct mapping of GBA address/data bits to SD card pins, simplifying complex state machine logic
     -- ========================================================================
     
-    -- SD Clock Generation (Original: mc_H1)
-    SD_CLK <= (GP_NWR and GP_NRD) or sd_output_enable;
+    -- SD模式激活检测
+    -- SD mode activation detection
+    sd_mode_active <= '1' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0') else '0';
+    sd_write_active <= sd_mode_active and (not GP_NWR);
+    sd_read_active <= sd_mode_active and (not GP_NRD);
     
-    -- Process for SD Card Output Data Buffers (D-FFs), clocked by GP_NCS.
-    -- This generates the final data values to be driven onto the SD lines.
-    sd_output_data_logic: process(GP_NCS)
+    -- SD时钟生成 - 简单的组合逻辑
+    -- SD Clock Generation - Simple combinational logic
+    SD_CLK <= sd_clk_out when sd_mode_active = '1' else 'Z';
+    
+    -- SD写操作 - 将GP数据位映射到SD引脚
+    -- SD Write Operation - Map GP data bits to SD pins
+    sd_write_process: process(CLK50MHz)
     begin
-        if rising_edge(GP_NCS) then
-            -- SD_DAT(0) Output Data (Original: mc_H3)
-            sd_dat0_out_data <= (not GP_22 or sd_dat3_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP_22 or sd_cmd_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(4) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or sd_dat0_out_data or not address_load_sync2)
-                and (sd_dat0_out_data or address_load_sync2 or gba_bus_idle_sync)
-                and (sd_dat0_out_data or address_load_sync2 or not gba_bus_idle_sync_d1);
-
-            -- SD_DAT(1) Output Data (Original: mc_H13)
-            sd_dat1_out_data <= (GP_22 or sd_dat1_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (not GP_22 or sd_dat0_out_data or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(5) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or not address_load_sync2 or sd_dat1_out_data)
-                and (address_load_sync2 or sd_dat1_out_data or gba_bus_idle_sync)
-                and (address_load_sync2 or sd_dat1_out_data or not gba_bus_idle_sync_d1);
-
-            -- SD_DAT(2) Output Data (Original: mc_H7)
-            sd_dat2_out_data <= (GP_22 or sd_dat2_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (not GP_22 or address_load_sync2 or sd_dat1_out_data or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(6) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or not address_load_sync2 or sd_dat2_out_data)
-                and (address_load_sync2 or sd_dat2_out_data or gba_bus_idle_sync)
-                and (address_load_sync2 or sd_dat2_out_data or not gba_bus_idle_sync_d1);
-
-            -- Common Logic for CMD and DAT3 (Original: mc_H9)
-            sd_common_out_logic <= (GP_22 or sd_dat3_state or address_load_sync2 or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (not GP_22 or address_load_sync2 or sd_dat2_out_data or gba_bus_idle_sync_d1 or not gba_bus_idle_sync)
-                and (GP(7) or GP_19 or not address_load_sync2 or address_load_sync)
-                and (not GP_19 or not address_load_sync2 or sd_common_out_logic)
-                and (address_load_sync2 or sd_common_out_logic or gba_bus_idle_sync)
-                and (address_load_sync2 or sd_common_out_logic or not gba_bus_idle_sync_d1);
+        if rising_edge(CLK50MHz) then
+            if sd_write_active = '1' then
+                -- 根据地址低位选择控制模式
+                case internal_address(2 downto 0) is
+                    when "000" => -- 地址偏移0: 控制SD_CLK
+                        sd_clk_out <= GP(0);
+                        
+                    when "001" => -- 地址偏移1: 控制SD_CMD
+                        sd_cmd_out <= GP(0);
+                        sd_cmd_oe <= GP(4);  -- 使用GP(4)控制CMD输出使能
+                        
+                    when "010" => -- 地址偏移2: 控制SD_DAT
+                        sd_dat_out <= GP(3 downto 0);
+                        sd_dat_oe <= GP(7 downto 4);  -- 使用GP(7:4)控制DAT输出使能
+                        
+                    when "011" => -- 地址偏移3: 组合控制
+                        sd_cmd_out <= GP(0);
+                        sd_dat_out <= GP(4 downto 1);
+                        sd_cmd_oe <= GP(8);
+                        sd_dat_oe <= GP(12 downto 9);
+                        
+                    when others => -- 其他地址: 保持当前状态
+                        null;
+                end case;
+            end if;
         end if;
     end process;
     
-    -- In the original design, H6 and H8 are directly fed by H9.
-    sd_dat3_out_data <= sd_common_out_logic; -- Original: mc_H6 <= mc_H9
-    sd_cmd_out_data  <= sd_common_out_logic; -- Original: mc_H8 <= mc_H9
-
-    -- SD Output Enable Control
-    sd_mode_active  <= not sd_output_enable;
-    sd_write_active <= not GP_NWR and sd_mode_active;
-
-    -- CMD Line OE: Active during a write in Command mode (GP_22=1).
-    sd_cmd_oe <= sd_write_active and GP_22;
+    -- SD读操作 - 将SD引脚状态映射到GP总线
+    -- SD Read Operation - Map SD pin states to GP bus
+    sd_read_process: process(sd_read_active, internal_address, SD_CMD, SD_DAT, sd_cmd_out, sd_dat_out, sd_cmd_oe, sd_dat_oe)
+    begin
+        if sd_read_active = '1' then
+            case internal_address(2 downto 0) is
+                when "000" => -- 地址偏移0: 读取SD引脚输入状态
+                    gp_output_data(0) <= SD_CMD;
+                    gp_output_data(4 downto 1) <= SD_DAT;
+                    gp_output_data(15 downto 5) <= (others => '0');
+                    
+                when "001" => -- 地址偏移1: 读取SD引脚输出状态
+                    gp_output_data(0) <= sd_cmd_out;
+                    gp_output_data(4 downto 1) <= sd_dat_out;
+                    gp_output_data(8) <= sd_cmd_oe;
+                    gp_output_data(12 downto 9) <= sd_dat_oe;
+                    gp_output_data(15 downto 13) <= (others => '0');
+                    gp_output_data(7 downto 5) <= (others => '0');
+                    
+                when "010" => -- 地址偏移2: 混合状态 (输入+输出)
+                    gp_output_data(0) <= SD_CMD;
+                    gp_output_data(1) <= sd_cmd_out;
+                    gp_output_data(2) <= sd_cmd_oe;
+                    gp_output_data(6 downto 3) <= SD_DAT;
+                    gp_output_data(10 downto 7) <= sd_dat_out;
+                    gp_output_data(14 downto 11) <= sd_dat_oe;
+                    gp_output_data(15) <= '0';
+                    
+                when others => -- 其他地址: 返回状态信息
+                    gp_output_data(0) <= sd_mode_active;
+                    gp_output_data(1) <= sd_write_active;
+                    gp_output_data(2) <= sd_read_active;
+                    gp_output_data(15 downto 3) <= (others => '0');
+            end case;
+        else
+            gp_output_data <= (others => '0');
+        end if;
+    end process;
     
-    -- DAT Lines OE: Active during a write in Data mode (GP_22=0).
-    sd_data_oe <= (others => (sd_write_active and not GP_22));
-    
-    -- Tri-state Buffers for Physical SD Lines
-    SD_CMD    <= sd_cmd_out_data  when sd_cmd_oe = '1' else 'Z';
-    SD_DAT(0) <= sd_dat0_out_data when sd_data_oe(0) = '1' else 'Z';
-    SD_DAT(1) <= sd_dat1_out_data when sd_data_oe(1) = '1' else 'Z';
-    SD_DAT(2) <= sd_dat2_out_data when sd_data_oe(2) = '1' else 'Z';
-    SD_DAT(3) <= sd_dat3_out_data when sd_data_oe(3) = '1' else 'Z';
+    -- SD引脚三态控制
+    -- SD Pin Tri-state Control
+    SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
+    SD_DAT(0) <= sd_dat_out(0) when sd_dat_oe(0) = '1' else 'Z';
+    SD_DAT(1) <= sd_dat_out(1) when sd_dat_oe(1) = '1' else 'Z';
+    SD_DAT(2) <= sd_dat_out(2) when sd_dat_oe(2) = '1' else 'Z';
+    SD_DAT(3) <= sd_dat_out(3) when sd_dat_oe(3) = '1' else 'Z';
 
 end behavioral;
