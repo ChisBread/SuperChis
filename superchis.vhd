@@ -451,10 +451,10 @@ begin
                         refresh_needed <= '0';
                     elsif n_ddr_sel = '0' then  -- GBA访问期间
                         if gba_bus_idle_sync = '0' then
-                            -- READ/WRITE命令
+                            -- READ/WRITE命令 (带写保护)
                             ddr_ras_reg <= '1';
                             ddr_cas_reg <= '0';
-                            ddr_we_reg  <= GP_NWR;  -- 直接使用GBA写信号
+                            ddr_we_reg  <= GP_NWR or not config_write_enable;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
                             if gba_bus_idle_sync_d1 = '1' then
                                 -- 列地址
                                 ddr_addr_reg(12) <= '0';

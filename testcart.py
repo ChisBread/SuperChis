@@ -248,6 +248,122 @@ def testBasicReadWrite():
         print(f"✗ 基础读写测试异常: {e}")
         return False
 
+def testWriteProtection():
+    """测试写保护功能"""
+    print("\n--- 写保护功能测试 ---")
+    
+    test_addr = 0x00002000  # 测试地址
+    test_value1 = 0x1234
+    test_value2 = 0x5678
+    
+    try:
+        addr_word = test_addr >> 1
+        
+        # 1. 首先确保写使能开启时可以正常写入
+        print("1. 验证写使能状态下正常写入...")
+        set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
+        time.sleep(0.01)
+        
+        writeRom(addr_word, test_value1)
+        time.sleep(0.001)
+        
+        actual_bytes = readRom(addr_word, 2)
+        actual = struct.unpack("<H", actual_bytes)[0]
+        
+        if actual != test_value1:
+            print(f"✗ 写使能状态下写入失败: 期望 0x{test_value1:04X}, 实际 0x{actual:04X}")
+            return False
+        
+        print(f"✓ 写使能状态下写入成功: 0x{actual:04X}")
+        
+        # 2. 关闭写使能，测试写保护
+        print("2. 测试写保护功能...")
+        set_sc_mode(sdram=1, sd_enable=0, write_enable=0)
+        time.sleep(0.01)
+        
+        # 记录写保护前的原始数据
+        original_bytes = readRom(addr_word, 2)
+        original_value = struct.unpack("<H", original_bytes)[0]
+        print(f"   写保护前原始数据: 0x{original_value:04X}")
+        
+        # 尝试写入新数据
+        print(f"   尝试写入新数据: 0x{test_value2:04X}")
+        writeRom(addr_word, test_value2)
+        time.sleep(0.001)
+        
+        # 读取数据，检查是否被写入
+        protected_bytes = readRom(addr_word, 2)
+        protected_value = struct.unpack("<H", protected_bytes)[0]
+        
+        if protected_value == original_value:
+            print(f"✓ 写保护生效: 数据保持为 0x{protected_value:04X}")
+        elif protected_value == test_value2:
+            print(f"✗ 写保护失效: 数据被写入为 0x{protected_value:04X}")
+            return False
+        else:
+            print(f"✗ 意外情况: 原始 0x{original_value:04X}, 写入 0x{test_value2:04X}, 读取 0x{protected_value:04X}")
+            return False
+        
+        # 3. 重新开启写使能，验证写入恢复正常
+        print("3. 验证重新开启写使能后写入恢复...")
+        set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
+        time.sleep(0.01)
+        
+        writeRom(addr_word, test_value2)
+        time.sleep(0.001)
+        
+        final_bytes = readRom(addr_word, 2)
+        final_value = struct.unpack("<H", final_bytes)[0]
+        
+        if final_value == test_value2:
+            print(f"✓ 写使能恢复正常: 0x{final_value:04X}")
+        else:
+            print(f"✗ 写使能恢复失败: 期望 0x{test_value2:04X}, 实际 0x{final_value:04X}")
+            return False
+        
+        # 4. 测试多个地址的写保护
+        print("4. 测试多个地址的写保护...")
+        test_addresses = [0x00003000, 0x00004000, 0x00005000]
+        
+        set_sc_mode(sdram=1, sd_enable=0, write_enable=0)
+        time.sleep(0.01)
+        
+        protection_errors = 0
+        for addr in test_addresses:
+            addr_word = addr >> 1
+            
+            # 读取原始数据
+            orig_bytes = readRom(addr_word, 2)
+            orig_val = struct.unpack("<H", orig_bytes)[0]
+            
+            # 尝试写入
+            new_val = 0x9999
+            writeRom(addr_word, new_val)
+            time.sleep(0.001)
+            
+            # 检查是否被保护
+            check_bytes = readRom(addr_word, 2)
+            check_val = struct.unpack("<H", check_bytes)[0]
+            
+            if check_val == orig_val:
+                print(f"   ✓ 地址 0x{addr:08X} 写保护正常")
+            else:
+                print(f"   ✗ 地址 0x{addr:08X} 写保护失效")
+                protection_errors += 1
+        
+        if protection_errors == 0:
+            print("✓ 多地址写保护测试通过")
+        else:
+            print(f"✗ {protection_errors} 个地址写保护失效")
+            return False
+        
+        print("✓ 写保护功能测试全部通过!")
+        return True
+        
+    except Exception as e:
+        print(f"✗ 写保护测试异常: {e}")
+        return False
+
 def verifySDRAM():
     """验证SDRAM写入功能 - 详细诊断"""
     print("\n--- SDRAM写入验证测试 ---")
@@ -559,12 +675,17 @@ if __name__ == "__main__":
             print("基础测试失败，跳过完整测试")
             exit(-1)
         
+        # 测试写保护
+        if not testWriteProtection():
+            print("写保护测试失败")
+            exit(-1)
         # 询问是否运行完整测试
         print("\n基础测试通过!")
         choice = input("是否运行完整的内存测试? (可能需要几分钟) [y/N]: ").lower()
         
         if choice in ['y', 'yes']:
             # 运行完整内存测试
+            set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
             success = runMemoryTests()
             
             if success:
