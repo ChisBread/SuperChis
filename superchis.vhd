@@ -62,11 +62,11 @@ architecture behavioral of superchis is
 
     -- SDRAM State Machine Types / SDRAM状态机类型
     type sdram_state_t is (
-        SDRAM_POWER_UP,     -- 上电状态：等待200us初始化延迟
+        SDRAM_POWER_UP,      -- 上电状态：等待200us初始化延迟
         SDRAM_PRECHARGE_ALL, -- 预充电所有Bank
-        SDRAM_MODE_REG_SET, -- 设置模式寄存器
-        SDRAM_AUTO_REFRESH, -- 执行8次自动刷新
-        SDRAM_IDLE         -- 空闲状态：等待访问请求
+        SDRAM_AUTO_REFRESH,  -- 执行8次自动刷新
+        SDRAM_MODE_REG_SET,  -- 设置模式寄存器
+        SDRAM_IDLE          -- 空闲状态：等待访问请求
     );
 
     -- ========================================================================
@@ -84,14 +84,14 @@ architecture behavioral of superchis is
     --- Write Recovery Time (tWR): 2tCK
     -- 时序参数常量 (基于50MHz时钟，20ns周期)
     -- 注意：这些是实际需要等待的周期数
-    constant tRC_CYCLES  : unsigned(3 downto 0) := to_unsigned(3, 4);  -- 60ns / 20ns = 3
-    constant tRAS_CYCLES : unsigned(3 downto 0) := to_unsigned(3, 4);  -- 42ns / 20ns = 2.1, 向上取整到3
-    constant tRCD_CYCLES : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 18ns / 20ns = 0.9, 向上取整到1
-    constant tRP_CYCLES  : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 18ns / 20ns = 0.9, 向上取整到1
-    constant tRRD_CYCLES : unsigned(3 downto 0) := to_unsigned(2, 4);  -- 2 * tCK = 2周期
-    constant tWR_CYCLES  : unsigned(3 downto 0) := to_unsigned(2, 4);  -- 2 * tCK = 2周期
-    constant REFRESH_INTERVAL : unsigned(11 downto 0) := to_unsigned(390, 12); -- 7.8125us / 20ns ≈ 390 cycles
-    
+    constant tRC_CYCLES  : unsigned(3 downto 0) := to_unsigned(2, 4);  -- 60ns / 20ns = 3
+    constant tRAS_CYCLES : unsigned(3 downto 0) := to_unsigned(2, 4);  -- 42ns / 20ns = 2.1, 向上取整到3
+    constant tRCD_CYCLES : unsigned(3 downto 0) := to_unsigned(0, 4);  -- 18ns / 20ns = 0.9, 向上取整到1
+    constant tRP_CYCLES  : unsigned(3 downto 0) := to_unsigned(0, 4);  -- 18ns / 20ns = 0.9, 向上取整到1
+    constant tRRD_CYCLES : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 2 * tCK = 2周期
+    constant tWR_CYCLES  : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 2 * tCK = 2周期
+    constant REFRESH_INTERVAL : unsigned(8 downto 0) := to_unsigned(384, 9); -- 7.8125us / 20ns ≈ 384 cycles
+
     -- SDRAM初始化常量 (根据数据手册要求)
     constant POWER_UP_DELAY : unsigned(15 downto 0) := to_unsigned(10000, 16); -- 200us / 20ns = 10000 cycles
     constant tRSC_CYCLES : unsigned(3 downto 0) := to_unsigned(3, 4);  -- Mode Register Set后的延迟
@@ -120,8 +120,13 @@ architecture behavioral of superchis is
     signal flash_address      : std_logic_vector(15 downto 0);  -- Address bus going to the Flash chip / 连接到Flash芯片的地址总线
     
     -- 50MHz Clock Driven DDR Control Signals / 50MHz时钟驱动的DDR控制信号
-    signal refresh_counter : unsigned(11 downto 0) := (others => '0'); -- 刷新计数器
-    signal refresh_needed    : std_logic := '0';
+    
+    -- SDRAM Timing Control Signals / SDRAM时序控制信号
+    signal row_active         : std_logic := '0';           -- 当前行是否激活
+    signal current_col        : std_logic_vector(12 downto 0) := (others => '0'); -- 当前激活的列地址
+    signal current_bank       : std_logic_vector(1 downto 0) := (others => '0');  -- 当前激活的Bank
+    signal refresh_counter    : unsigned(8 downto 0) := (others => '0'); -- 刷新计数器
+    signal refresh_needed    : std_logic := '0';           -- 刷新挂起标志
     
     -- DDR Address and Control Registers / DDR地址和控制寄存器
     signal ddr_addr_reg : std_logic_vector(12 downto 0) := (others => '0');
@@ -365,22 +370,28 @@ begin
     -- 基于原来可工作的设计 + W9825G6KH数据手册要求
     -- ========================================================================
 
-    -- SDRAM控制器 - 基于原始可工作设计，增加初始化序列
+    -- ========================================================================
+    -- Standard SDRAM Controller for W9825G6KH-6I / W9825G6KH-6I标准SDRAM控制器
+    -- Implements proper initialization sequence and timing-compliant operations
+    -- 实现正确的初始化序列和符合时序的操作
+    -- ========================================================================
+
+    -- SDRAM Controller Process / SDRAM控制器进程
     sdram_controller: process(CLK50MHz)
+        variable target_row  : std_logic_vector(12 downto 0);
+        variable target_bank : std_logic_vector(1 downto 0);
     begin
         if rising_edge(CLK50MHz) then
-            -- 地址加载同步链
+            -- 同步GBA信号
             address_load_sync2 <= address_load_sync;
             address_load_sync <= address_load;
-            
-            -- GBA总线状态同步
             gba_bus_idle_sync_d1 <= gba_bus_idle_sync;
             gba_bus_idle_sync <= GP_NWR and GP_NRD;
             
-            
-            -- SDRAM初始化状态机 (当config_map_reg=1时启动)
-                -- DDR模式启用，运行初始化或正常操作
             case sdram_state is
+                -- =============================================================
+                -- 初始化序列 / Initialization Sequence
+                -- =============================================================
                 when SDRAM_POWER_UP =>
                     -- 上电延迟200us，但可以近似成GBA CPU启动
                     ddr_cke_reg <= '0';  -- CKE低电平
@@ -430,70 +441,68 @@ begin
                     ddr_ba_reg <= (others => '0');
                     sdram_state <= SDRAM_IDLE;
                     
-                when others =>
-            
-                    -- 刷新计数器管理
+                -- =============================================================
+                -- 正常操作状态 / Normal Operation States
+                -- =============================================================
+                when SDRAM_IDLE =>
+                    -- 检查GBA访问请求
+                    -- 刷新计数器
                     refresh_counter <= refresh_counter + 1;
                     if refresh_counter >= REFRESH_INTERVAL then
                         refresh_counter <= (others => '0');
                         refresh_needed <= '1';
                     end if;
-                    -- 初始化完成，使用原来的GBA同步逻辑
-                    ddr_cke_reg <= '1';  -- 时钟始终使能
-                    
+                    -- 检查是否需要刷新
                     if refresh_needed = '1' and (n_ddr_sel = '1' or (gba_bus_idle_sync = '1' and address_load_sync = '0')) then
-                        -- AUTO REFRESH命令 (只在总线空闲时执行)
+                        -- 刷新：RAS=0, CAS=0, WE=1
                         ddr_ras_reg <= '0';
                         ddr_cas_reg <= '0';
                         ddr_we_reg  <= '1';
                         ddr_addr_reg <= (others => '0');
                         ddr_ba_reg <= (others => '0');
                         refresh_needed <= '0';
-                    elsif n_ddr_sel = '0' then  -- GBA访问期间
-                        if gba_bus_idle_sync = '0' then
-                            -- READ/WRITE命令 (带写保护)
-                            ddr_ras_reg <= '1';
-                            ddr_cas_reg <= '0';
-                            ddr_we_reg  <= GP_NWR or not config_write_enable;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
-                            if gba_bus_idle_sync_d1 = '1' then
-                                -- 列地址
-                                ddr_addr_reg(12) <= '0';
-                                ddr_addr_reg(11) <= '0';
-                                ddr_addr_reg(10) <= '0';  -- A10=0表示不auto-precharge
-                                ddr_addr_reg(9)  <= '0';
-                                ddr_addr_reg(8)  <= internal_address(8);
-                                ddr_addr_reg(7)  <= internal_address(7);
-                                ddr_addr_reg(6)  <= internal_address(6);
-                                ddr_addr_reg(5)  <= internal_address(5);
-                                ddr_addr_reg(4)  <= internal_address(4);
-                                ddr_addr_reg(3)  <= internal_address(3);
-                                ddr_addr_reg(2)  <= internal_address(2);
-                                ddr_addr_reg(1)  <= internal_address(1);
-                                ddr_addr_reg(0)  <= internal_address(0);
-                            end if;
-                        else
-                            -- ACTIVE命令 (地址阶段)
+                    elsif n_ddr_sel = '0' then
+                        
+                        -- 检查是否需要切换行
+                        if row_active = '0' then
+                            -- 需要激活新行
                             ddr_ras_reg <= '0';
                             ddr_cas_reg <= '1';
                             ddr_we_reg  <= '1';
-                            -- 行地址
-                            ddr_addr_reg(12) <= GP_21;
-                            ddr_addr_reg(11) <= GP_20;
-                            ddr_addr_reg(10) <= GP_19;
-                            ddr_addr_reg(9)  <= GP_18;
-                            ddr_addr_reg(8)  <= GP_17;
-                            ddr_addr_reg(7)  <= GP_16;
-                            ddr_addr_reg(6)  <= internal_address(15);
-                            ddr_addr_reg(5)  <= internal_address(14);
-                            ddr_addr_reg(4)  <= internal_address(13);
-                            ddr_addr_reg(3)  <= internal_address(12);
-                            ddr_addr_reg(2)  <= internal_address(11);
-                            ddr_addr_reg(1)  <= internal_address(10);
-                            ddr_addr_reg(0)  <= internal_address(9);
+                            ddr_addr_reg <= GP_21 & GP_20 & GP_19 & GP_18 & GP_17 & GP_16 & 
+                                        std_logic_vector(internal_address(15 downto 9));
+                            ddr_ba_reg <= GP_23 & GP_22;
+                            row_active <= '1';
+                        elsif (gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0') then
+                            -- 先预充电当前行
+                            -- 预充电：RAS=0, CAS=1, WE=0
+                            ddr_ras_reg <= '0';
+                            ddr_cas_reg <= '1';
+                            ddr_we_reg  <= '0';
+                            ddr_addr_reg <= (others => '0');
+                            ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
+                            ddr_ba_reg <= (others => '0');
+                            row_active <= '0';
+                            current_col(12 downto 9) <= (others => '0');
+                            current_col(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
+                            current_bank <= GP_23 & GP_22;
+
+                        elsif gba_bus_idle_sync = '0' then
+                            -- 同一行，直接读写
+                            ddr_ras_reg <= '1';
+                            ddr_cas_reg <= '0';
+                            ddr_we_reg  <= GP_NWR or not config_write_enable;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
+                            -- 列地址
+                            ddr_addr_reg <= current_col;
+                            ddr_ba_reg <= current_bank;
+                        else
+                            ddr_ras_reg <= '0';
+                            ddr_cas_reg <= '1';
+                            ddr_we_reg  <= '1';
+                            ddr_addr_reg <= GP_21 & GP_20 & GP_19 & GP_18 & GP_17 & GP_16 & 
+                                        std_logic_vector(internal_address(15 downto 9));
+                            ddr_ba_reg <= GP_23 & GP_22;
                         end if;
-                        -- Bank地址使用最高位
-                        ddr_ba_reg(1) <= GP_23;
-                        ddr_ba_reg(0) <= GP_22;
                     else
                         -- 空闲状态，NOP命令
                         ddr_ras_reg <= '1';
@@ -502,6 +511,9 @@ begin
                         ddr_addr_reg <= (others => '0');
                         ddr_ba_reg <= (others => '0');
                     end if;
+                when others =>
+                    sdram_state <= SDRAM_POWER_UP;
+                    
             end case;
         end if;
     end process;

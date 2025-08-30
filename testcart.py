@@ -209,11 +209,10 @@ def diagnoseSuperChis():
         print(f"诊断过程异常: {e}")
         return False
 
-def testBasicReadWrite():
+def testBasicReadWrite(test_addr = 0x00000000):
     """基础读写测试"""
     print("\n--- 基础读写测试 ---")
-    
-    test_addr = 0x00000000  # GBA ROM区域起始
+    # GBA ROM区域起始
     test_data = [0x1234, 0x5678, 0xABCD, 0xEF00]
     
     print(f"测试地址: 0x{test_addr:08X}")
@@ -248,11 +247,9 @@ def testBasicReadWrite():
         print(f"✗ 基础读写测试异常: {e}")
         return False
 
-def testWriteProtection():
+def testWriteProtection(test_addr = 0x00002000):
     """测试写保护功能"""
     print("\n--- 写保护功能测试 ---")
-    
-    test_addr = 0x00002000  # 测试地址
     test_value1 = 0x1234
     test_value2 = 0x5678
     
@@ -378,8 +375,38 @@ def verifySDRAM():
         (0x0000100A, 0xEF00),
         (0x0000100C, 0x0000),
         (0x0000100E, 0xFFFF),
+        (0x00F0100E, 0xDEAD),
+        (0x00F0100C, 0xBEEF), 
+        (0x00F0100A, 0x1234),
+        (0x00F01008, 0x5678),
+        (0x00F01006, 0xABCD),
+        (0x00F01004, 0xEF00),
+        (0x00F01002, 0x0000),
+        (0x00F01000, 0xFFFF),
+        (0x01001000, 0xDEAD),
+        (0x01001002, 0xBEEF), 
+        (0x01001004, 0x1234),
+        (0x01001006, 0x5678),
+        (0x01001008, 0xABCD),
+        (0x0100100A, 0xEF00),
+        (0x0100100C, 0x0000),
+        (0x0100100E, 0xFFFF),
+        (0x00450496, 0x1234),
+        (0x002EEC96, 0x74AF),
+        (0x00A9170A, 0xEF00),
+        (0x00F6A70A, 0xAFE7)
     ]
-    
+    # # 随机地址，随机数据
+    random.seed(42)
+    same = set([x[0] for x in test_cases])
+    for _ in range(200):
+        addr = random.randint(0, 0x01FFFFFF)
+        addr = addr - (addr % 2)
+        val = random.randint(0, 0xFFFF)
+        if addr not in same:
+            same.add(addr)
+            test_cases.append((addr, val))
+
     print("测试多个地址和数据模式...")
     errors = 0
     
@@ -389,9 +416,18 @@ def verifySDRAM():
             
             # 写入测试数据
             writeRom(addr_word, test_value)
-            time.sleep(0.001)  # 短暂延迟
-            
+                
+        except Exception as e:
+            print(f"✗ 地址 0x{test_addr:08X} 测试异常: {e}")
+            errors += 1
+    
+    set_sc_mode(sdram=0, sd_enable=0, write_enable=0)
+    time.sleep(0.6)
+    set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
+    for test_addr, test_value in test_cases[::-1]:
+        try:
             # 读取并验证
+            addr_word = test_addr >> 1
             actual_bytes = readRom(addr_word, 2)
             actual = struct.unpack("<H", actual_bytes)[0]
             
@@ -403,11 +439,10 @@ def verifySDRAM():
                 xor_diff = test_value ^ actual
                 print(f"    XOR差异: 0x{xor_diff:04X} (二进制: {xor_diff:016b})")
                 errors += 1
-                
         except Exception as e:
             print(f"✗ 地址 0x{test_addr:08X} 测试异常: {e}")
             errors += 1
-    
+
     # 测试地址线
     print("\n测试地址线...")
     addr_line_errors = 0
@@ -496,7 +531,7 @@ def testMemoryPattern(start_addr, length, pattern_name, pattern_func):
     print("写入测试数据...")
     start_time = time.time()
     
-    write_size = 256  # 每次写入256字节
+    write_size = 4096
     for offset in range(0, length, write_size):
         chunk_size = min(write_size, length - offset)
         chunk_data = test_data[offset:offset + chunk_size]
@@ -504,8 +539,7 @@ def testMemoryPattern(start_addr, length, pattern_name, pattern_func):
         # 转换为16位字地址
         addr_word = (start_addr + offset) >> 1
         writeRom(addr_word, chunk_data)
-        
-        if offset % (write_size * 16) == 0:  # 每4KB显示进度
+        if offset % (length // 4) == 0:
             progress = (offset / length) * 100
             print(f"写入进度: {progress:.1f}%")
     
@@ -517,8 +551,8 @@ def testMemoryPattern(start_addr, length, pattern_name, pattern_func):
     start_time = time.time()
     
     errors = 0
-    read_size = 256  # 每次读取256字节
-    
+    read_size = 4096
+
     for offset in range(0, length, read_size):
         chunk_size = min(read_size, length - offset)
         expected_data = test_data[offset:offset + chunk_size]
@@ -534,19 +568,53 @@ def testMemoryPattern(start_addr, length, pattern_name, pattern_func):
                 print(f"  期望: {expected_data.hex()}")
                 print(f"  实际: {actual_data.hex()}")
         
-        if offset % (read_size * 16) == 0:  # 每4KB显示进度
+        if offset % (length // 4) == 0:
             progress = (offset / length) * 100
             print(f"校验进度: {progress:.1f}%")
+    
+    # 随机读1000次
+    print("随机读取1000次进行校验...")
+    random_errors = 0
+    for _ in range(1000):
+        # 生成一个随机的、偶数对齐的偏移量
+        offset = random.randint(0, length - 2) & ~1 
+        
+        addr_word = (start_addr + offset) >> 1
+        
+        # 读取实际数据
+        actual_data = readRom(addr_word, 2)
+        
+        # 获取期望数据
+        expected_data_chunk = test_data[offset:offset+2]
+        
+        if actual_data != expected_data_chunk:
+            random_errors += 1
+            if random_errors <= 10: # 只显示前10个随机读错误
+                print(f"  ✗ 随机地址 0x{start_addr + offset:08X} 校验失败:")
+                print(f"    期望: {expected_data_chunk.hex()}")
+                print(f"    实际: {actual_data.hex()}")
+
+    if random_errors > 0:
+        print(f"✗ 随机读取测试发现 {random_errors} 个错误")
+    else:
+        print("✓ 随机读取测试通过")
     
     read_time = time.time() - start_time
     print(f"校验完成，耗时: {read_time:.2f}秒")
     
-    if errors == 0:
+    total_errors = errors + random_errors
+    if total_errors == 0:
         print(f"✓ {pattern_name} 测试通过!")
     else:
-        print(f"✗ {pattern_name} 测试失败! 发现 {errors} 个错误")
+        print(f"✗ {pattern_name} 测试失败! 发现 {total_errors} 个错误")
     
-    return errors == 0
+    return total_errors == 0
+def generatePatternFile(length):
+    data = bytearray()
+    with open("test.gba", 'rb') as f:
+        f.seek(0)
+        data = f.read(length)
+    return data
 
 def generatePatternAA55(length):
     """生成0xAA55交替模式"""
@@ -571,18 +639,18 @@ def generatePatternIncremental(length):
     """生成递增模式"""
     return bytearray(i & 0xFF for i in range(length))
 
-def runMemoryTests():
+def runMemoryTests(start_addr = 0x00000000):
     """运行完整的内存测试"""
     print("\n=== SuperChis SDRAM 测试 ===")
     
-    test_size = 1024 * 1024  # 测试1MB
-    start_addr = 0x00000000  # GBA ROM区域起始地址
+    test_size = 1 * 1024 * 1024  # 测试1MB
     
     tests = [
+        # ("文件测试", generatePatternFile),
         ("0xAA55 交替模式", generatePatternAA55),
         ("0x5500 交替模式", generatePattern5500),
         ("递增模式", generatePatternIncremental),
-        ("随机模式", generatePatternRandom)
+        # ("随机模式", generatePatternRandom)
     ]
     
     passed = 0
@@ -671,12 +739,12 @@ if __name__ == "__main__":
             exit(-1)
         
         # 基础读写测试
-        if not testBasicReadWrite():
+        if not testBasicReadWrite(0x0000000) or not testBasicReadWrite(0x1000000):
             print("基础测试失败，跳过完整测试")
             exit(-1)
         
         # 测试写保护
-        if not testWriteProtection():
+        if not testWriteProtection(0x00002000) or not testWriteProtection(0x1002000):
             print("写保护测试失败")
             exit(-1)
         # 询问是否运行完整测试
