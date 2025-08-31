@@ -504,9 +504,7 @@ begin
                             gp_output_data <= (0 => SD_CMD, others => '0');
                         end if;
                     elsif sd_access_type = SD_ACCESS_READ then
-                        gp_output_data(15 downto 0) <= (others => '0');
-                        gp_output_data(8) <= SD_DAT(0);
-                        gp_output_data(3 downto 0) <= SD_DAT;
+                        gp_output_data <= gp_output_data(11 downto 0) & SD_DAT;
                     elsif sd_access_type = SD_ACCESS_WRITE then
                         sd_dat_out <= GP(3 downto 0);
                         sd_dat_oe  <= '1';
