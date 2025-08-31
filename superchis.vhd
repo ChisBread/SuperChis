@@ -138,7 +138,7 @@ architecture behavioral of superchis is
     
     -- Bus Control / 总线控制
     signal gp_output_enable   : std_logic := '0';           -- Output enable for the GP data bus / GP数据总线的输出使能
-    signal gp_output_data     : std_logic_vector(15 downto 0) := (others => '0'); -- Data to be driven onto the GP bus / 将要驱动到GP总线上的数据
+    signal sd_io_buffer     : std_logic_vector(15 downto 0) := (others => '0'); -- Data to be driven onto the GP bus / 将要驱动到GP总线上的数据
     
     -- Timing Control (Synchronizers) / 时序控制 (同步器)
     -- These signals are synchronized versions of GBA bus signals, used to avoid metastability. / GBA总线信号的同步版本，用于避免亚稳态。
@@ -153,7 +153,6 @@ architecture behavioral of superchis is
     
     -- SD Interface - Simplified GPIO Mapping Signals / SD接口 - 简化GPIO映射信号
     signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
-    signal sd_dat_out     : std_logic_vector(3 downto 0) := (others => '1'); -- SD DAT output register / SD DAT输出寄存器
     signal sd_cmd_oe      : std_logic := '0';           -- SD CMD output enable register / SD CMD输出使能寄存器
     signal sd_dat_oe      : std_logic := '0';           -- SD DAT output enable register / SD DAT输出使能寄存器
     signal sd_mode_active     : std_logic;                   -- SD mode active flag / SD模式激活标志
@@ -468,7 +467,7 @@ begin
 
     sd_mode_active <= '1' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0' and magic_address = '0') else '0';
     gp_output_enable <= '1' when (GP_NRD = '0' and (config_sd_enable = '1' and GP_23 = '1')) else '0';
-    GP <= gp_output_data when gp_output_enable = '1' else (others => 'Z');
+    GP <= sd_io_buffer when gp_output_enable = '1' else (others => 'Z');
 
     SD_CLK <= (GP_NWR and GP_NRD) or sd_mode_active;
 
@@ -501,12 +500,13 @@ begin
                             sd_cmd_oe  <= '1';
                         elsif GP_NRD = '0' then
                             sd_cmd_oe <= '0';
-                            gp_output_data <= (0 => SD_CMD, others => '0');
+                            sd_io_buffer <= (0 => SD_CMD, others => '0');
                         end if;
                     elsif sd_access_type = SD_ACCESS_READ then
-                        gp_output_data <= gp_output_data(11 downto 0) & SD_DAT;
+                        sd_io_buffer <= sd_io_buffer(11 downto 0) & SD_DAT;
                     elsif sd_access_type = SD_ACCESS_WRITE then
-                        sd_dat_out <= GP(3 downto 0);
+                        -- 这里应该是8bit写入？但时钟怎么驱动
+                        sd_io_buffer <= sd_io_buffer(11 downto 0) & GP(3 downto 0);
                         sd_dat_oe  <= '1';
                     else
                         sd_cmd_oe <= '0';
@@ -524,6 +524,6 @@ begin
     -- Tri-state control for SD pins
     -- SD引脚的三态控制
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
-    SD_DAT <= sd_dat_out when sd_dat_oe = '1' else (others => 'Z');
+    SD_DAT <= sd_io_buffer(15 downto 12) when sd_dat_oe = '1' else (others => 'Z');
 
 end behavioral;
