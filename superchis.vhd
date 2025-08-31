@@ -52,13 +52,6 @@ architecture behavioral of superchis is
     -- ========================================================================
     -- Type Definitions / 类型定义
     -- ========================================================================
-    
-    -- Access Mode Types / 访问模式类型
-    type access_mode_t is (
-        MODE_FLASH,     -- Accessing Flash/SRAM / 访问闪存或SRAM
-        MODE_DDR,       -- Accessing DDR SDRAM / 访问DDR SDRAM
-        MODE_SD         -- Accessing SD Card I/O / 访问SD卡IO
-    );
 
     -- SDRAM State Machine Types / SDRAM状态机类型
     type sdram_state_t is (
@@ -99,11 +92,6 @@ architecture behavioral of superchis is
     constant tRRD_CYCLES : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 2 * tCK = 2周期
     constant tWR_CYCLES  : unsigned(3 downto 0) := to_unsigned(1, 4);  -- 2 * tCK = 2周期
     constant REFRESH_INTERVAL : unsigned(8 downto 0) := to_unsigned(384, 9); -- 7.8125us / 20ns ≈ 384 cycles
-
-    -- SDRAM初始化常量 (根据数据手册要求)
-    constant POWER_UP_DELAY : unsigned(15 downto 0) := to_unsigned(10000, 16); -- 200us / 20ns = 10000 cycles
-    constant tRSC_CYCLES : unsigned(3 downto 0) := to_unsigned(3, 4);  -- Mode Register Set后的延迟
-    constant REFRESH_COUNT_INIT : unsigned(3 downto 0) := to_unsigned(8, 4);   -- 初始化需要8次刷新
 
     -- ========================================================================
     -- Internal Signals / 内部信号
@@ -148,10 +136,6 @@ architecture behavioral of superchis is
     -- DDR chip select signal
     signal n_ddr_sel : std_logic := '1';  -- DDR not selected (active low)
     
-    
-    -- Access Control / 访问控制
-    signal sd_output_enable   : std_logic := '1';           -- Master output enable for the SD card I/O block / SD卡IO模块的主输出使能
-    
     -- Bus Control / 总线控制
     signal gp_output_enable   : std_logic := '0';           -- Output enable for the GP data bus / GP数据总线的输出使能
     signal gp_output_data     : std_logic_vector(15 downto 0) := (others => '0'); -- Data to be driven onto the GP bus / 将要驱动到GP总线上的数据
@@ -168,15 +152,12 @@ architecture behavioral of superchis is
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
     
     -- SD Interface - Simplified GPIO Mapping Signals / SD接口 - 简化GPIO映射信号
-    signal sd_clk_out         : std_logic := '0';           -- SD clock output register / SD时钟输出寄存器
     signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
     signal sd_dat_out     : std_logic_vector(3 downto 0) := (others => '1'); -- SD DAT output register / SD DAT输出寄存器
     signal sd_cmd_oe      : std_logic := '0';           -- SD CMD output enable register / SD CMD输出使能寄存器
     signal sd_dat_oe      : std_logic := '0';           -- SD DAT output enable register / SD DAT输出使能寄存器
     signal sd_mode_active     : std_logic;                   -- SD mode active flag / SD模式激活标志
     signal sd_access_type     : sd_access_type_t := SD_ACCESS_NONE; -- SD access type / SD访问类型
-    signal sd_write_active    : std_logic;                   -- SD write operation active / SD写操作激活
-    signal sd_read_active     : std_logic;                   -- SD read operation active / SD读操作激活
 
 begin
 
@@ -528,20 +509,9 @@ begin
     -- Chip Enable Generation / 片选信号生成
     -- ========================================================================
 
-    -- This logic is a faithful reconstruction of the original hardware's
-    -- chip enable logic from original.vhd macrocells. These signals are active-low.
-    -- 此逻辑忠实地重构了原始硬件(original.vhd)宏单元的片选逻辑。这些信号都是低电平有效。
-
     -- FLASH_NCE is enabled when: GP_NCS is active, not in DDR mode, and not in SD mode (or GP_23 is low).
-    -- The clk3 dependency is unusual but faithful to the original.
     -- FLASH_NCE在以下情况使能: GP_NCS有效, 非DDR模式, 且非SD模式(或GP_23为低)。
-    -- 对clk3的依赖不寻常，但忠于原始设计。
-    FLASH_NCE <= GP_NCS or config_map_reg or (config_sd_enable and GP_23); -- or clk3
-
-    -- SD I/O mode detection
-    -- SD I/O模式检测
-    
-    sd_output_enable <= GP_NCS or not GP_23 or not config_sd_enable or magic_address;
+    FLASH_NCE <= GP_NCS or config_map_reg or (config_sd_enable and GP_23);
     
     -- Pass through GBA R/W signals to Flash/SRAM directly.
     -- 将GBA的读写信号直接透传给Flash/SRAM。
@@ -549,9 +519,7 @@ begin
     FLASH_SRAM_NOE <= GP_NRD;
 
     -- ========================================================================
-    -- GP Bus Output Control / GP总线输出控制
-    -- Controls when the CPLD drives data onto the GBA's GP data bus.
-    -- 控制CPLD何时将数据驱动到GBA的GP数据总线上。
+    -- SD Card Controller / SD卡控制器
     -- ========================================================================
 
     sd_mode_active <= '1' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0' and magic_address = '0') else '0';
