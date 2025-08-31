@@ -162,12 +162,6 @@ architecture behavioral of superchis is
 begin
 
     -- ========================================================================
-    -- Address Decoding and Mode Selection / 地址译码与模式选择
-    -- Determines the current operating mode based on configuration registers.
-    -- 基于配置寄存器的值，决定当前的芯片工作模式。
-    -- ========================================================================
-
-    -- ========================================================================
     -- Magic Address Detection and Configuration / 魔术地址检测与配置
     -- Implements the unlock sequence required by the GBA driver.
     -- A specific 4-write sequence to address 0x09FFFFFE configures the chip.
@@ -291,56 +285,6 @@ begin
     end process;
     flash_address <= std_logic_vector(internal_address);
     FLASH_A <= flash_address;
-    -- ---- 以下是旧版SuperCard的逻辑
-    -- process(internal_address, config_bank_select, config_write_enable)
-    -- begin
-    --     -- Direct implementation based on CPLD report address scrambling and banking
-    --     -- 基于CPLD报告的地址重映射与Bank选择的直接实现
-
-    --     -- Direct Scrambling / 直接重映射
-    --     flash_address(0)  <= internal_address(7);  -- FLASH-A0 = iaddr-a7
-    --     flash_address(2)  <= internal_address(6);  -- FLASH-A2 = iaddr-a6
-    --     flash_address(4)  <= internal_address(0);  -- FLASH-A4 = iaddr-a0
-    --     flash_address(5)  <= internal_address(2);  -- FLASH-A5 = iaddr-a2
-    --     flash_address(8)  <= internal_address(3);  -- FLASH-A8 = iaddr-a3
-    --     flash_address(10) <= internal_address(10); -- FLASH-A10 = iaddr-a10
-    --     flash_address(12) <= internal_address(12); -- FLASH-A12 = iaddr-a12
-    --     flash_address(13) <= internal_address(13); -- FLASH-A13 = iaddr-a13
-
-    --     -- Scrambling combined with Banking Logic (OR logic from report)
-    --     -- 与Bank逻辑结合的重映射部分（来自报告的“或”逻辑）
-    --     flash_address(1)  <= internal_address(1); -- or config_bank_select(3); -- FLASH-A1 = mc_C1 = mc_B15 | iaddr-a1
-    --     flash_address(3)  <= internal_address(5); -- or config_bank_select(3) or config_bank_select(4); -- FLASH-A3 = mc_C15 = mc_B15 | iaddr-a5 | mc_C9
-    --     flash_address(6)  <= internal_address(8); -- or config_bank_select(4) ; -- FLASH-A6 = mc_C8 = mc_C9 | iaddr-a8
-    --     flash_address(7)  <= internal_address(4); --  or config_bank_select(0); -- FLASH-A7 = mc_D1 = iaddr-a4 | mc_C10
-    --     flash_address(11) <= internal_address(11); -- or config_bank_select(2); -- FLASH-A11 = mc_D2 = iaddr-a11 | mc_D9
-    --     flash_address(14) <= internal_address(14); -- or config_bank_select(1); -- FLASH-A14 = mc_C6 = iaddr-a14 | mc_G14
-    --     flash_address(15) <= internal_address(15); -- or config_bank_select(0) or config_bank_select(1) or config_bank_select(2); -- FLASH-A15 = mc_D0 = mc_C10 | iaddr-a15 | mc_D9 | mc_G14
-    --     -- Gated Logic (AND logic from report)
-    --     -- 门控逻辑部分（来自报告的“与”逻辑）
-    --     flash_address(9)  <= internal_address(9); -- and config_write_enable; -- FLASH-A9 = mc_E7 = iaddr-a9 & WRITEENABLE
-    -- end process;
-    
-
-    -- ========================================================================
-    -- DDR SDRAM Controller - 完全基于原始CPLD方程重构
-    -- DDR SDRAM Controller - Complete reconstruction based on original CPLD equations
-    -- 完全按照 original_report.html 中的方程重构
-    -- Fully reconstructed according to equations in original_report.html
-    -- ========================================================================
-
-    
-    -- ========================================================================
-    -- SDRAM Controller with Proper Initialization / 带正确初始化的SDRAM控制器
-    -- Based on original working design + W9825G6KH datasheet requirements
-    -- 基于原来可工作的设计 + W9825G6KH数据手册要求
-    -- ========================================================================
-
-    -- ========================================================================
-    -- Standard SDRAM Controller for W9825G6KH-6I / W9825G6KH-6I标准SDRAM控制器
-    -- Implements proper initialization sequence and timing-compliant operations
-    -- 实现正确的初始化序列和符合时序的操作
-    -- ========================================================================
 
     sdram_syncer: process(CLK50MHz)
     begin
@@ -536,6 +480,7 @@ begin
                 -- 0x01800000 -> GP_22=1 -> CMD access
                 -- 0x01100000 -> GP_19=1 -> DATA access (read)
                 -- 0x01000000 -> others  -> DATA access (write)
+                -- -- 0x01200000 -> GP_20=1 -> DATA access (read/write with 32bit)
                 if address_load_sync2 = '0' and address_load_sync = '1' then
                     selector := GP_22 & GP_19;
                     case selector is
