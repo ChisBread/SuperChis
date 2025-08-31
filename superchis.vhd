@@ -122,8 +122,6 @@ architecture behavioral of superchis is
     -- 50MHz Clock Driven DDR Control Signals / 50MHz时钟驱动的DDR控制信号
     
     -- SDRAM Timing Control Signals / SDRAM时序控制信号
-    signal current_col        : std_logic_vector(12 downto 0) := (others => '0'); -- 当前激活的列地址
-    signal current_bank       : std_logic_vector(1 downto 0) := (others => '0');  -- 当前激活的Bank
     signal refresh_counter    : unsigned(8 downto 0) := (others => '0'); -- 刷新计数器
     signal refresh_needed     : std_logic := '0';                        -- 刷新挂起标志
     signal ddr_cycle_counter      : unsigned(3 downto 0) := (others => '0');
@@ -457,9 +455,6 @@ begin
                             ddr_addr_reg <= GP_21 & GP_20 & GP_19 & GP_18 & GP_17 & GP_16 & 
                                         std_logic_vector(internal_address(15 downto 9));
                             ddr_ba_reg <= GP_23 & GP_22;
-                            current_col(12 downto 9) <= (others => '0');
-                            current_col(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
-                            current_bank <= GP_23 & GP_22;
                             ddr_cycle_counter <= (others => '0');
                         elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
                             -- cycle 1~3
@@ -468,8 +463,9 @@ begin
                             ddr_cas_reg <= '0';
                             ddr_we_reg  <= gba_bus_wr_sync;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
                             -- 列地址
-                            ddr_addr_reg <= current_col;
-                            ddr_ba_reg <= current_bank;
+                            ddr_addr_reg(12 downto 9) <= (others => '0');
+                            ddr_addr_reg(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
+                            ddr_ba_reg <= GP_23 & GP_22;
                             if ddr_cycle_counter > x"3" then
                                 -- 预充电：RAS=0, CAS=1, WE=0
                                 ddr_ras_reg <= '0';
