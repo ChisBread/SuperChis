@@ -639,6 +639,105 @@ def generatePatternIncremental(length):
     """生成递增模式"""
     return bytearray(i & 0xFF for i in range(length))
 
+def lcg32(s):
+    """32位线性同余生成器"""
+    return (s * 1664525 + 1013904223) & 0xFFFFFFFF
+
+def sdram_stress_test(max_size_mb=4, progress_callback=None):
+    """
+    SDRAM压力测试 - 简化版本，每次写入2字节，不恢复数据
+    
+    Args:
+        max_size_mb: 最大测试大小(MB)，默认4MB
+        progress_callback: 进度回调函数
+    
+    Returns:
+        测试结果: 成功返回True，失败返回负数表示失败位置
+    """
+    print(f"\n--- SDRAM压力测试 (测试范围: {max_size_mb}MB) ---")
+    
+    start_seed = 0xdeadbeef
+    test_size_words = max_size_mb * 1024 * 1024 // 2  # 转换为16位字数量
+    test_size_bytes = test_size_words * 2
+    buffer_size = 512  # 512个16位字的缓冲区
+    
+    # 临时缓冲区用于存储期望的数据
+    tmp = bytearray(buffer_size * 2)  # 1KB缓冲区
+    
+    rndgen = start_seed
+    pos = 0
+    
+    print(f"开始压力测试，测试{test_size_words}个16位字...")
+    print("测试模式: 写入随机数据，延迟验证，简化版本")
+    
+    start_time = time.time()
+    
+    try:
+        for i in range(test_size_words):
+            # 验证之前写入的数据 (延迟512个位置)
+            if i >= buffer_size:
+                prev_pos = (pos - 22541 * buffer_size) & (test_size_words - 1)
+                prev_addr = prev_pos * 2  # 转换为字节地址
+                
+                # 读取SDRAM中的数据
+                addr_word = prev_addr >> 1  # 转换为16位字地址
+                actual_data = readRom(addr_word, 2)  # 读取2字节(16位)
+                actual_value = struct.unpack("<H", actual_data)[0]
+                
+                # 从tmp中获取期望的值
+                buf_idx = i & (buffer_size - 1)
+                expected_bytes = tmp[buf_idx*2:(buf_idx+1)*2]
+                expected_value = struct.unpack("<H", expected_bytes)[0]
+                
+                if actual_value != expected_value:
+                    print(f"✗ 验证失败在位置 {prev_pos} (0x{prev_addr:08X})")
+                    print(f"    期望: 0x{expected_value:04X}, 实际: 0x{actual_value:04X}")
+                    print(f"    XOR差异: 0x{expected_value ^ actual_value:04X}")
+                    return -i  # 返回负的失败位置
+            
+            # 生成随机值并存储到临时缓冲区
+            current_addr = pos * 2  # 转换为字节地址
+            addr_word = current_addr >> 1  # 转换为16位字地址
+            
+            # 生成16位随机值
+            rnd_value = rndgen & 0xFFFF
+            rnd_bytes = struct.pack("<H", rnd_value)
+            
+            # 存储期望值到缓冲区
+            buf_idx = i & (buffer_size - 1)
+            tmp[buf_idx*2:(buf_idx+1)*2] = rnd_bytes
+            
+            # 写入随机值到SDRAM
+            writeRom(addr_word, rnd_value)
+            
+            # 更新生成器和位置
+            pos = (pos + 22541) & (test_size_words - 1)
+            rndgen = lcg32(rndgen)
+            
+            # 更新进度
+            if (i + 1) % 0x1000 == 0: 
+                progress = (i + 1) / test_size_words * 100
+                elapsed = time.time() - start_time
+                print(f"进度: {progress:.1f}% ({i+1}/{test_size_words}), 用时: {elapsed:.1f}秒")
+                
+                if progress_callback:
+                    if progress_callback(i >> 16, test_size_words >> 16):
+                        print("测试被用户中断")
+                        break
+        
+        elapsed_time = time.time() - start_time
+        print(f"✓ SDRAM压力测试完成! 用时: {elapsed_time:.1f}秒")
+        print(f"   测试了 {test_size_words} 个16位字 ({test_size_bytes/1024/1024:.1f}MB)")
+        print(f"   平均速度: {test_size_bytes/1024/1024/elapsed_time:.2f} MB/s")
+        
+        return True
+        
+    except Exception as e:
+        print(f"✗ SDRAM压力测试异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def runMemoryTests(start_addr = 0x00000000):
     """运行完整的内存测试"""
     print("\n=== SuperChis SDRAM 测试 ===")
@@ -747,6 +846,23 @@ if __name__ == "__main__":
         if not testWriteProtection(0x00002000) or not testWriteProtection(0x1002000):
             print("写保护测试失败")
             exit(-1)
+            
+        # SDRAM压力测试
+        print("\n准备运行SDRAM压力测试...")
+        choice = input("是否运行SDRAM压力测试? (推荐，验证数据完整性) [Y/n]: ").lower()
+        
+        if choice not in ['n', 'no']:
+            # 运行SDRAM压力测试
+            set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
+            time.sleep(0.1)
+            
+            stress_result = sdram_stress_test(max_size_mb=1)
+            
+            if stress_result == True:
+                print("✓ SDRAM压力测试通过！数据完整性良好。")
+            else:
+                print(f"✗ SDRAM压力测试失败！问题位置: {stress_result}")
+                
         # 询问是否运行完整测试
         print("\n基础测试通过!")
         choice = input("是否运行完整的内存测试? (可能需要几分钟) [y/N]: ").lower()
