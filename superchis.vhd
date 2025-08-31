@@ -69,6 +69,14 @@ architecture behavioral of superchis is
         SDRAM_IDLE          -- 空闲状态：等待访问请求
     );
 
+    -- SD Access Type / SD访问类型
+    type sd_access_type_t is (
+        SD_ACCESS_NONE, -- No SD access / 无SD访问
+        SD_ACCESS_CMD,  -- Accessing command register / 访问命令寄存器
+        SD_ACCESS_READ,  -- Accessing data register / 访问数据寄存器
+        SD_ACCESS_WRITE  -- Accessing data register / 访问数据寄存器
+    );
+
     -- ========================================================================
     -- Constants / 常量定义
     -- ========================================================================
@@ -164,8 +172,9 @@ architecture behavioral of superchis is
     signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
     signal sd_dat_out     : std_logic_vector(3 downto 0) := (others => '1'); -- SD DAT output register / SD DAT输出寄存器
     signal sd_cmd_oe      : std_logic := '0';           -- SD CMD output enable register / SD CMD输出使能寄存器
-    signal sd_dat_oe      : std_logic_vector(3 downto 0) := (others => '0'); -- SD DAT output enable register / SD DAT输出使能寄存器
+    signal sd_dat_oe      : std_logic := '0';           -- SD DAT output enable register / SD DAT输出使能寄存器
     signal sd_mode_active     : std_logic;                   -- SD mode active flag / SD模式激活标志
+    signal sd_access_type     : sd_access_type_t := SD_ACCESS_NONE; -- SD access type / SD访问类型
     signal sd_write_active    : std_logic;                   -- SD write operation active / SD写操作激活
     signal sd_read_active     : std_logic;                   -- SD read operation active / SD读操作激活
 
@@ -544,109 +553,66 @@ begin
     -- Controls when the CPLD drives data onto the GBA's GP data bus.
     -- 控制CPLD何时将数据驱动到GBA的GP数据总线上。
     -- ========================================================================
-    
-    -- The GP bus is driven during GBA read cycles in SD mode
-    -- GP总线在SD模式的GBA读周期时由本芯片驱动
-    gp_output_enable <= '1' when (GP_NRD = '0' and (config_sd_enable = '1' and GP_23 = '1')) else '0';
 
-    -- GP bus tri-state control. Drive the bus when enabled, otherwise high-impedance.
-    -- GP总线三态控制。使能时驱动总线，否则为高阻态。
+    sd_mode_active <= '1' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0' and magic_address = '0') else '0';
+    gp_output_enable <= '1' when (GP_NRD = '0' and (config_sd_enable = '1' and GP_23 = '1')) else '0';
     GP <= gp_output_data when gp_output_enable = '1' else (others => 'Z');
 
-    -- ========================================================================
-    -- SD Card Interface - Simplified GPIO Mapping
-    -- SD卡接口 - 简化的GPIO映射
-    -- 直接将GBA地址/数据位映射到SD卡引脚，简化复杂的状态机逻辑
-    -- Direct mapping of GBA address/data bits to SD card pins, simplifying complex state machine logic
-    -- ========================================================================
-    
-    -- SD模式激活检测
-    -- SD mode activation detection
-    sd_mode_active <= '1' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0') else '0';
-    sd_write_active <= sd_mode_active and (not GP_NWR);
-    sd_read_active <= sd_mode_active and (not GP_NRD);
-    
-    -- SD时钟生成 - 简单的组合逻辑
-    -- SD Clock Generation - Simple combinational logic
-    SD_CLK <= sd_clk_out when sd_mode_active = '1' else 'Z';
-    
-    -- SD写操作 - 将GP数据位映射到SD引脚
-    -- SD Write Operation - Map GP data bits to SD pins
-    sd_write_process: process(CLK50MHz)
+    SD_CLK <= (GP_NWR and GP_NRD) or sd_mode_active;
+
+    process(CLK50MHz)
+        variable selector : std_logic_vector(1 downto 0);
     begin
-        if rising_edge(CLK50MHz) then
-            if sd_write_active = '1' then
-                -- 根据地址低位选择控制模式
-                case internal_address(2 downto 0) is
-                    when "000" => -- 地址偏移0: 控制SD_CLK
-                        sd_clk_out <= GP(0);
-                        
-                    when "001" => -- 地址偏移1: 控制SD_CMD
-                        sd_cmd_out <= GP(0);
-                        sd_cmd_oe <= GP(4);  -- 使用GP(4)控制CMD输出使能
-                        
-                    when "010" => -- 地址偏移2: 控制SD_DAT
+        if falling_edge(CLK50MHz) then
+            if sd_mode_active = '1' then
+                -- 0x01800000 -> GP_22=1 -> CMD access
+                -- 0x01100000 -> GP_19=1 -> DATA access (read)
+                -- 0x01000000 -> others  -> DATA access (write)
+                if address_load_sync2 = '0' and address_load_sync = '1' then
+                    selector := GP_22 & GP_19;
+                    case selector is
+                        when "10" => -- GP_22=1
+                            sd_access_type <= SD_ACCESS_CMD;
+                        when "01" => -- GP_19=1
+                            sd_access_type <= SD_ACCESS_READ;
+                        when "00" => -- Default data access
+                            sd_access_type <= SD_ACCESS_WRITE;
+                        when others =>
+                            sd_access_type <= SD_ACCESS_NONE;
+                    end case;
+                end if;
+                if gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0' then
+                    if sd_access_type = SD_ACCESS_CMD then
+                        if GP_NWR = '0' then
+                            sd_cmd_out <= GP(7);
+                            sd_cmd_oe  <= '1';
+                        elsif GP_NRD = '0' then
+                            sd_cmd_oe <= '0';
+                            gp_output_data <= (0 => SD_CMD, others => '0');
+                        end if;
+                    elsif sd_access_type = SD_ACCESS_READ then
+                        gp_output_data(15 downto 0) <= (others => '0');
+                        gp_output_data(8) <= SD_DAT(0);
+                        gp_output_data(3 downto 0) <= SD_DAT;
+                    elsif sd_access_type = SD_ACCESS_WRITE then
                         sd_dat_out <= GP(3 downto 0);
-                        sd_dat_oe <= GP(7 downto 4);  -- 使用GP(7:4)控制DAT输出使能
-                        
-                    when "011" => -- 地址偏移3: 组合控制
-                        sd_cmd_out <= GP(0);
-                        sd_dat_out <= GP(4 downto 1);
-                        sd_cmd_oe <= GP(8);
-                        sd_dat_oe <= GP(12 downto 9);
-                        
-                    when others => -- 其他地址: 保持当前状态
-                        null;
-                end case;
+                        sd_dat_oe  <= '1';
+                    else
+                        sd_cmd_oe <= '0';
+                        sd_dat_oe <= '0';
+                    end if;
+                end if;
+            else
+                sd_access_type <= SD_ACCESS_NONE;
+                sd_cmd_oe <= '0';
+                sd_dat_oe <= '0';
             end if;
         end if;
     end process;
-    
-    -- SD读操作 - 将SD引脚状态映射到GP总线
-    -- SD Read Operation - Map SD pin states to GP bus
-    sd_read_process: process(sd_read_active, internal_address, SD_CMD, SD_DAT, sd_cmd_out, sd_dat_out, sd_cmd_oe, sd_dat_oe)
-    begin
-        if sd_read_active = '1' then
-            case internal_address(2 downto 0) is
-                when "000" => -- 地址偏移0: 读取SD引脚输入状态
-                    gp_output_data(0) <= SD_CMD;
-                    gp_output_data(4 downto 1) <= SD_DAT;
-                    gp_output_data(15 downto 5) <= (others => '0');
-                    
-                when "001" => -- 地址偏移1: 读取SD引脚输出状态
-                    gp_output_data(0) <= sd_cmd_out;
-                    gp_output_data(4 downto 1) <= sd_dat_out;
-                    gp_output_data(8) <= sd_cmd_oe;
-                    gp_output_data(12 downto 9) <= sd_dat_oe;
-                    gp_output_data(15 downto 13) <= (others => '0');
-                    gp_output_data(7 downto 5) <= (others => '0');
-                    
-                when "010" => -- 地址偏移2: 混合状态 (输入+输出)
-                    gp_output_data(0) <= SD_CMD;
-                    gp_output_data(1) <= sd_cmd_out;
-                    gp_output_data(2) <= sd_cmd_oe;
-                    gp_output_data(6 downto 3) <= SD_DAT;
-                    gp_output_data(10 downto 7) <= sd_dat_out;
-                    gp_output_data(14 downto 11) <= sd_dat_oe;
-                    gp_output_data(15) <= '0';
-                    
-                when others => -- 其他地址: 返回状态信息
-                    gp_output_data(0) <= sd_mode_active;
-                    gp_output_data(1) <= sd_write_active;
-                    gp_output_data(2) <= sd_read_active;
-                    gp_output_data(15 downto 3) <= (others => '0');
-            end case;
-        else
-            gp_output_data <= (others => '0');
-        end if;
-    end process;
-    
-    -- SD引脚三态控制
-    -- SD Pin Tri-state Control
+
+    -- Tri-state control for SD pins
+    -- SD引脚的三态控制
     SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
-    SD_DAT(0) <= sd_dat_out(0) when sd_dat_oe(0) = '1' else 'Z';
-    SD_DAT(1) <= sd_dat_out(1) when sd_dat_oe(1) = '1' else 'Z';
-    SD_DAT(2) <= sd_dat_out(2) when sd_dat_oe(2) = '1' else 'Z';
-    SD_DAT(3) <= sd_dat_out(3) when sd_dat_oe(3) = '1' else 'Z';
+    SD_DAT <= sd_dat_out when sd_dat_oe = '1' else (others => 'Z');
 
 end behavioral;
