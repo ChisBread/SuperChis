@@ -851,7 +851,7 @@ if __name__ == "__main__":
         print("\n准备运行SDRAM压力测试...")
         choice = input("是否运行SDRAM压力测试? (推荐，验证数据完整性) [Y/n]: ").lower()
         
-        if choice not in ['n', 'no']:
+        if choice in ['y', 'yes']:
             # 运行SDRAM压力测试
             set_sc_mode(sdram=1, sd_enable=0, write_enable=1)
             time.sleep(0.1)

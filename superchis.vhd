@@ -144,7 +144,6 @@ architecture behavioral of superchis is
     
     
     -- Access Control / 访问控制
-    signal current_mode       : access_mode_t := MODE_FLASH; -- Current top-level access mode / 当前顶层访问模式
     signal sd_output_enable   : std_logic := '1';           -- Master output enable for the SD card I/O block / SD卡IO模块的主输出使能
     
     -- Bus Control / 总线控制
@@ -179,20 +178,6 @@ begin
     -- Determines the current operating mode based on configuration registers.
     -- 基于配置寄存器的值，决定当前的芯片工作模式。
     -- ========================================================================
-    
-    process(internal_address, config_map_reg, config_sd_enable, GP_16, GP_17, GP_18, GP_19, GP_20, GP_21, GP_22, GP_23)
-    begin
-        -- Default to Flash mode / 默认为Flash模式
-        current_mode <= MODE_FLASH;
-        
-        if config_sd_enable = '1' and GP_23 = '1' then
-            current_mode <= MODE_SD;
-        elsif config_map_reg = '1' then
-            current_mode <= MODE_DDR;
-        else
-            current_mode <= MODE_FLASH;
-        end if;
-    end process;
 
     -- ========================================================================
     -- Magic Address Detection and Configuration / 魔术地址检测与配置
@@ -319,39 +304,33 @@ begin
     flash_address <= std_logic_vector(internal_address);
     FLASH_A <= flash_address;
     -- ---- 以下是旧版SuperCard的逻辑
-    -- process(internal_address, config_bank_select, current_mode, config_write_enable)
+    -- process(internal_address, config_bank_select, config_write_enable)
     -- begin
-    --     if current_mode = MODE_FLASH then
-    --         -- Direct implementation based on CPLD report address scrambling and banking
-    --         -- 基于CPLD报告的地址重映射与Bank选择的直接实现
+    --     -- Direct implementation based on CPLD report address scrambling and banking
+    --     -- 基于CPLD报告的地址重映射与Bank选择的直接实现
 
-    --         -- Direct Scrambling / 直接重映射
-    --         flash_address(0)  <= internal_address(7);  -- FLASH-A0 = iaddr-a7
-    --         flash_address(2)  <= internal_address(6);  -- FLASH-A2 = iaddr-a6
-    --         flash_address(4)  <= internal_address(0);  -- FLASH-A4 = iaddr-a0
-    --         flash_address(5)  <= internal_address(2);  -- FLASH-A5 = iaddr-a2
-    --         flash_address(8)  <= internal_address(3);  -- FLASH-A8 = iaddr-a3
-    --         flash_address(10) <= internal_address(10); -- FLASH-A10 = iaddr-a10
-    --         flash_address(12) <= internal_address(12); -- FLASH-A12 = iaddr-a12
-    --         flash_address(13) <= internal_address(13); -- FLASH-A13 = iaddr-a13
+    --     -- Direct Scrambling / 直接重映射
+    --     flash_address(0)  <= internal_address(7);  -- FLASH-A0 = iaddr-a7
+    --     flash_address(2)  <= internal_address(6);  -- FLASH-A2 = iaddr-a6
+    --     flash_address(4)  <= internal_address(0);  -- FLASH-A4 = iaddr-a0
+    --     flash_address(5)  <= internal_address(2);  -- FLASH-A5 = iaddr-a2
+    --     flash_address(8)  <= internal_address(3);  -- FLASH-A8 = iaddr-a3
+    --     flash_address(10) <= internal_address(10); -- FLASH-A10 = iaddr-a10
+    --     flash_address(12) <= internal_address(12); -- FLASH-A12 = iaddr-a12
+    --     flash_address(13) <= internal_address(13); -- FLASH-A13 = iaddr-a13
 
-    --         -- Scrambling combined with Banking Logic (OR logic from report)
-    --         -- 与Bank逻辑结合的重映射部分（来自报告的“或”逻辑）
-    --         flash_address(1)  <= internal_address(1); -- or config_bank_select(3); -- FLASH-A1 = mc_C1 = mc_B15 | iaddr-a1
-    --         flash_address(3)  <= internal_address(5); -- or config_bank_select(3) or config_bank_select(4); -- FLASH-A3 = mc_C15 = mc_B15 | iaddr-a5 | mc_C9
-    --         flash_address(6)  <= internal_address(8); -- or config_bank_select(4) ; -- FLASH-A6 = mc_C8 = mc_C9 | iaddr-a8
-    --         flash_address(7)  <= internal_address(4); --  or config_bank_select(0); -- FLASH-A7 = mc_D1 = iaddr-a4 | mc_C10
-    --         flash_address(11) <= internal_address(11); -- or config_bank_select(2); -- FLASH-A11 = mc_D2 = iaddr-a11 | mc_D9
-    --         flash_address(14) <= internal_address(14); -- or config_bank_select(1); -- FLASH-A14 = mc_C6 = iaddr-a14 | mc_G14
-    --         flash_address(15) <= internal_address(15); -- or config_bank_select(0) or config_bank_select(1) or config_bank_select(2); -- FLASH-A15 = mc_D0 = mc_C10 | iaddr-a15 | mc_D9 | mc_G14
-    --         -- Gated Logic (AND logic from report)
-    --         -- 门控逻辑部分（来自报告的“与”逻辑）
-    --         flash_address(9)  <= internal_address(9); -- and config_write_enable; -- FLASH-A9 = mc_E7 = iaddr-a9 & WRITEENABLE
-    --     else
-    --         -- In non-Flash modes, pass the address through directly.
-    --         -- 在非Flash模式下，直接透传地址。
-    --         flash_address <= std_logic_vector(internal_address);
-    --     end if;
+    --     -- Scrambling combined with Banking Logic (OR logic from report)
+    --     -- 与Bank逻辑结合的重映射部分（来自报告的“或”逻辑）
+    --     flash_address(1)  <= internal_address(1); -- or config_bank_select(3); -- FLASH-A1 = mc_C1 = mc_B15 | iaddr-a1
+    --     flash_address(3)  <= internal_address(5); -- or config_bank_select(3) or config_bank_select(4); -- FLASH-A3 = mc_C15 = mc_B15 | iaddr-a5 | mc_C9
+    --     flash_address(6)  <= internal_address(8); -- or config_bank_select(4) ; -- FLASH-A6 = mc_C8 = mc_C9 | iaddr-a8
+    --     flash_address(7)  <= internal_address(4); --  or config_bank_select(0); -- FLASH-A7 = mc_D1 = iaddr-a4 | mc_C10
+    --     flash_address(11) <= internal_address(11); -- or config_bank_select(2); -- FLASH-A11 = mc_D2 = iaddr-a11 | mc_D9
+    --     flash_address(14) <= internal_address(14); -- or config_bank_select(1); -- FLASH-A14 = mc_C6 = iaddr-a14 | mc_G14
+    --     flash_address(15) <= internal_address(15); -- or config_bank_select(0) or config_bank_select(1) or config_bank_select(2); -- FLASH-A15 = mc_D0 = mc_C10 | iaddr-a15 | mc_D9 | mc_G14
+    --     -- Gated Logic (AND logic from report)
+    --     -- 门控逻辑部分（来自报告的“与”逻辑）
+    --     flash_address(9)  <= internal_address(9); -- and config_write_enable; -- FLASH-A9 = mc_E7 = iaddr-a9 & WRITEENABLE
     -- end process;
     
 
@@ -470,7 +449,7 @@ begin
                         refresh_needed <= '0';
                     elsif n_ddr_sel = '0' then
                         ddr_cycle_counter <= ddr_cycle_counter + 1;
-                        if ddr_cycle_counter = x"11" or (gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0') then
+                        if gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0' then
                             -- cycle 0
                             ddr_ras_reg <= '0';
                             ddr_cas_reg <= '1';
@@ -491,8 +470,16 @@ begin
                             -- 列地址
                             ddr_addr_reg <= current_col;
                             ddr_ba_reg <= current_bank;
+                            if ddr_cycle_counter > x"3" then
+                                -- 预充电：RAS=0, CAS=1, WE=0
+                                ddr_ras_reg <= '0';
+                                ddr_cas_reg <= '1';
+                                ddr_we_reg  <= '0';
+                                ddr_addr_reg <= (others => '0');
+                                ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
+                                ddr_ba_reg <= (others => '0');
+                            end if;
                         elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1' then
-                            -- 先预充电当前行
                             -- 预充电：RAS=0, CAS=1, WE=0
                             ddr_ras_reg <= '0';
                             ddr_cas_reg <= '1';
@@ -500,7 +487,6 @@ begin
                             ddr_addr_reg <= (others => '0');
                             ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
                             ddr_ba_reg <= (others => '0');
-                            ddr_cycle_counter <= to_unsigned(9, 4); -- 复位到9
                         else
                             -- 空闲状态，NOP命令
                             ddr_ras_reg <= '1';
@@ -565,7 +551,7 @@ begin
     
     -- The GP bus is driven during GBA read cycles in SD mode
     -- GP总线在SD模式的GBA读周期时由本芯片驱动
-    gp_output_enable <= '1' when (GP_NRD = '0' and (current_mode = MODE_SD)) else '0';
+    gp_output_enable <= '1' when (GP_NRD = '0' and (config_sd_enable = '1' and GP_23 = '1')) else '0';
 
     -- GP bus tri-state control. Drive the bus when enabled, otherwise high-impedance.
     -- GP总线三态控制。使能时驱动总线，否则为高阻态。
