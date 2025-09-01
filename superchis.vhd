@@ -153,19 +153,19 @@ architecture behavioral of superchis is
     signal gba_bus_rd_sync       : std_logic := '1';           -- Timing sync stage (original: mc_H15) / 时序同步级
     signal addr_clock         : std_logic := '0';          -- Composite clock for address counter (original: mc_H11) / 地址计数器的组合时钟 (原始: mc_H11)  
     
-    -- SD Interface - Detailed implementation based on SCSD documentation / SD接口 - 基于SCSD文档的详细实现
-    signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
-    signal sd_dat_out     : std_logic_vector(3 downto 0) := "1111"; -- SD DAT output register / SD DAT输出寄存器
-    signal n_sd_mode_active : std_logic;                  -- SD mode active flag / SD模式激活标志
+    -- SD Interface - Clean forward implementation based on reverse analysis
+    -- SD接口 - 基于逆向分析的正向清洁实现
+    -- 分离的移位寄存器：SD.reg1用于输出，SD.reg2用于输入
+    signal sd_output_shift_reg : std_logic_vector(3 downto 0) := (others => '1'); -- 输出移位寄存器 (原SD.reg1)
+    signal sd_cmd_output       : std_logic := '1';                                 -- CMD输出缓冲
+    signal sd_dat_output       : std_logic_vector(3 downto 0) := "1111";          -- DAT输出缓冲
+    signal n_sd_mode_active    : std_logic;                                        -- SD模式激活标志
     
-    -- Combinatorial address decoding signals / 组合逻辑地址解码信号
-    signal sd_access_type : sd_access_type_t;            -- Combinatorial SD access type / 组合逻辑SD访问类型
-    signal sd_cmd_write_active : std_logic;                   -- CMD write operation active / CMD写操作激活
-    signal sd_dat_write_active : std_logic;                   -- DAT write operation active / DAT写操作激活
+    -- Timing and control signals / 时序与控制信号
+    signal sd_access_type      : sd_access_type_t;                                 -- SD访问类型
     
-    -- Write registers (address 0x01000000) / 写入寄存器 (地址 0x01000000) 
-    signal dat_write_buffer   : std_logic_vector(3 downto 0) := x"0";    -- 4位写入缓冲
-    signal dat_write_phase    : std_logic := '0';                         -- 写入相位 (0=锁存数据, 1=发送数据)
+    -- Buffer for GBA data output / GBA数据输出缓冲
+    signal sd_read_buffer      : std_logic_vector(15 downto 0) := (others => '0');
 
 begin
 
@@ -478,109 +478,80 @@ begin
     FLASH_SRAM_NOE <= GP_NRD;
 
     -- ========================================================================
-    -- SD Card Controller / SD卡控制器
-    -- Implements SCSD SD card communication protocol based on documentation
-    -- 实现基于文档的SCSD SD卡通信协议
+    -- SD Card Controller - Forward Implementation / SD卡控制器 - 正向实现
+    -- Based on reverse analysis of original CPLD logic
+    -- 基于原始CPLD逻辑的逆向分析
     -- ========================================================================
 
-    -- nSDOUT
     n_sd_mode_active <= '0' when (config_sd_enable = '1' and GP_23 = '1' and GP_NCS = '0' and magic_address = '0') else '1';
-    GP <= sd_io_buffer when (n_sd_mode_active = '0' and GP_NRD = '0') else (others => 'Z');
-
+    GP <= sd_read_buffer when (n_sd_mode_active = '0' and GP_NRD = '0') else (others => 'Z');
     SD_CLK <= (GP_NWR and GP_NRD) or n_sd_mode_active;
     -- Address decoding for SD interface / SD接口地址解码
     -- 0x01800000 -> GP_22=1, GP_20=0, GP_19=0 -> CMD interface
     -- 0x01100000 -> GP_22=0, GP_20=0, GP_19=1 -> DAT read interface  
     -- 0x01000000 -> GP_22=0, GP_20=0, GP_19=0 -> DAT write interface
-    sd_access_type <= SD_ACCESS_CMD  when (GP_22 = '1' and GP_19 = '0') else
-                          SD_ACCESS_READ  when (GP_22 = '0' and GP_19 = '1') else
-                          SD_ACCESS_WRITE when (GP_22 = '0' and GP_19 = '0') else
-                          SD_ACCESS_NONE;
-    
-    -- Combinatorial control signals / 组合逻辑控制信号
-    sd_cmd_write_active <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_CMD and GP_NWR = '0') else '0';
-    sd_dat_write_active <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_WRITE and GP_NWR = '0') else '0';
-
-    -- SD Interface Controller Process / SD接口控制器进程
-    -- Synchronous data registers only - control logic is combinatorial
-    -- 仅同步数据寄存器 - 控制逻辑是组合的
+    sd_access_type <= SD_ACCESS_CMD   when (GP_22 = '1') else
+                      SD_ACCESS_READ  when (GP_22 = '0' and GP_19 = '1') else
+                      SD_ACCESS_WRITE when (GP_22 = '0' and GP_19 = '0') else
+                      SD_ACCESS_NONE;
     sd_controller: process(CLK50MHz)
     begin
         if falling_edge(CLK50MHz) then
+            -- Only process when SD mode is active / 仅在SD模式活动时处理
             if n_sd_mode_active = '0' then
-                -- 读写是否需要在不同时机采样
-                -- Handle GBA bus transactions for data registers only / 仅处理数据寄存器的GBA总线事务
-                if gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0' then
-                    -- Start of GBA access cycle / GBA访问周期开始
-                    
+                -- Once address_load falling edge, two consecutive rising edges of gba_bus_idle_sync will occur for SD_ACCESS_WRITE
+                -- 一次连续传输只会发送一次address_load下降，也就是说uint32_t写入，会是一次address_load下降，两次gba_bus_idle_sync上升
+                if address_load_sync2 = '1' and address_load_sync = '0' then
                     case sd_access_type is
-                        -- =======================================================
-                        -- CMD Interface (0x01800000) / CMD接口 (0x01800000)
-                        -- =======================================================
                         when SD_ACCESS_CMD =>
-                            if GP_NWR = '0' then
-                                -- CMD Write: Latch output data / CMD写入：锁存输出数据
-                                sd_cmd_out <= GP(7);
-                                -- Clear input buffer for next read / 清除输入缓冲以备下次读取
-                                sd_io_buffer <= (others => '0');
-                                
-                            elsif GP_NRD = '0' then
-                                -- CMD Read: Latch input data / CMD读取：锁存输入数据
-                                sd_io_buffer <= (0 => SD_CMD, others => '0');
-                            end if;
-
-                        -- =======================================================  
-                        -- DAT Read Interface (0x01100000) / DAT读接口 (0x01100000)
-                        -- =======================================================
-                        when SD_ACCESS_READ =>
-                            if GP_NRD = '0' then
-                                -- Shift in 4 bits from DAT lines / 从DAT线移入4位
-                                sd_io_buffer <= sd_io_buffer(11 downto 0) & SD_DAT;
-                            end if;
-
-                        -- =======================================================
-                        -- DAT Write Interface (0x01000000) / DAT写接口 (0x01000000) 
-                        -- =======================================================
+                            sd_cmd_output <= GP(7);
                         when SD_ACCESS_WRITE =>
-                            if GP_NWR = '0' then
-                                -- GBA 32-bit write = 2 × 16-bit writes automatically
-                                if dat_write_phase = '0' then
-                                    -- Phase 0: Latch 8-bit data and send lower 4 bits
-                                    dat_write_buffer <= GP(7 downto 4);
-                                    sd_dat_out <= GP(3 downto 0);
-                                    dat_write_phase <= '1';
-                                else
-                                    -- Phase 1: Send upper 4 bits of latched data  
-                                    sd_dat_out <= dat_write_buffer;
-                                    dat_write_phase <= '0';
-                                end if;
-                                
-                                -- Status return for write operations / 写操作的状态返回
-                                sd_io_buffer <= x"0000";
-                                sd_io_buffer(8) <= SD_DAT(0);
-                            end if;
-
+                            -- LSB or MSB?
+                            sd_output_shift_reg <= GP(7 downto 4);
+                            sd_dat_output <= GP(3 downto 0);
                         when others =>
-                            -- Default state / 默认状态
-                            sd_io_buffer <= (others => '0');
+                            null;
+                    end case;
+                elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
+                    case sd_access_type is
+                        when SD_ACCESS_CMD =>
+                            sd_read_buffer(0) <= SD_CMD;
+                        when SD_ACCESS_READ =>
+                            sd_read_buffer(15 downto 12) <= SD_DAT;
+                        when others =>
+                            null;
+                    end case;
+                elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1' then
+                    case sd_access_type is
+                        when SD_ACCESS_WRITE =>
+                            sd_dat_output <= sd_output_shift_reg;
+                        when SD_ACCESS_READ =>
+                            -- LSB or MSB?
+                            sd_read_buffer <= "0000" & sd_read_buffer(15 downto 4);
+                        when others =>
+                            null;
                     end case;
                 end if;
-                
-            -- else
-            --     SD mode inactive - reset all states / SD模式非激活 - 重置所有状态
-            --     sd_dat_out <= "1111";
-            --     sd_cmd_out <= '1';
-            --     dat_write_phase <= '0';
-            --     sd_io_buffer <= (others => '0');
+            else
+                sd_cmd_output <= '1';                        -- CMD idle high (SD spec)
             end if;
         end if;
     end process;
 
-    -- Tri-state control for SD pins / SD引脚的三态控制
-    -- CMD line: bidirectional with individual control / CMD线：双向个别控制
-    SD_CMD <= sd_cmd_out when sd_cmd_write_active = '1' else 'Z';
+    -- SD Pin Tri-state Control / SD引脚三态控制
+    -- Enhanced tri-state logic with improved timing and control
+    -- 增强的三态逻辑，改进时序和控制
     
-    -- DAT lines: 4-bit parallel with individual enable control / DAT线：4位并行个别使能控制
-    SD_DAT <= sd_dat_out when sd_dat_write_active = '1' else (others => '0');
+    -- CMD: Drive during CMD write operations with proper timing
+    -- CMD：在CMD写操作期间驱动，具有适当的时序
+    SD_CMD <= sd_cmd_output when (n_sd_mode_active = '0' and 
+                                  sd_access_type = SD_ACCESS_CMD and 
+                                  GP_NWR = '0') else 'Z';
+    
+    -- DAT: Drive during DAT write operations with enhanced control
+    -- DAT：在DAT写操作期间驱动，具有增强的控制
+    SD_DAT <= sd_dat_output when (n_sd_mode_active = '0' and 
+                                  sd_access_type = SD_ACCESS_WRITE and 
+                                  GP_NWR = '0') else (others => 'Z');
 
 end behavioral;
