@@ -155,21 +155,16 @@ architecture behavioral of superchis is
     
     -- SD Interface - Detailed implementation based on SCSD documentation / SD接口 - 基于SCSD文档的详细实现
     signal sd_cmd_out     : std_logic := '1';           -- SD CMD output register / SD CMD输出寄存器
-    signal sd_cmd_oe      : std_logic := '0';           -- SD CMD output enable register / SD CMD输出使能寄存器
-    signal sd_dat_oe      : std_logic_vector(3 downto 0) := "0000"; -- SD DAT output enable register / SD DAT输出使能寄存器
     signal sd_dat_out     : std_logic_vector(3 downto 0) := "1111"; -- SD DAT output register / SD DAT输出寄存器
     signal n_sd_mode_active : std_logic;                  -- SD mode active flag / SD模式激活标志
     
     -- Combinatorial address decoding signals / 组合逻辑地址解码信号
     signal sd_access_type : sd_access_type_t;            -- Combinatorial SD access type / 组合逻辑SD访问类型
     signal sd_cmd_write_active : std_logic;                   -- CMD write operation active / CMD写操作激活
-    signal sd_cmd_read_active  : std_logic;                   -- CMD read operation active / CMD读操作激活
     signal sd_dat_write_active : std_logic;                   -- DAT write operation active / DAT写操作激活
-    signal sd_dat_read_active  : std_logic;                   -- DAT read operation active / DAT读操作激活
-    
     
     -- Write registers (address 0x01000000) / 写入寄存器 (地址 0x01000000) 
-    signal dat_write_buffer   : std_logic_vector(3 downto 0) := x"00";    -- 8位写入缓冲
+    signal dat_write_buffer   : std_logic_vector(3 downto 0) := x"0";    -- 4位写入缓冲
     signal dat_write_phase    : std_logic := '0';                         -- 写入相位 (0=锁存数据, 1=发送数据)
 
 begin
@@ -504,16 +499,7 @@ begin
     
     -- Combinatorial control signals / 组合逻辑控制信号
     sd_cmd_write_active <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_CMD and GP_NWR = '0') else '0';
-    sd_cmd_read_active  <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_CMD and GP_NRD = '0') else '0';
     sd_dat_write_active <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_WRITE and GP_NWR = '0') else '0';
-    sd_dat_read_active  <= '1' when (n_sd_mode_active = '0' and sd_access_type = SD_ACCESS_READ and GP_NRD = '0') else '0';
-
-    -- Combinatorial output enable control / 组合逻辑输出使能控制
-    -- Based on original design: SD.CMD.OE = !GP.nWR & GP.AD[22] & !nSDOUT
-    sd_cmd_oe <= sd_cmd_write_active;
-    
-    -- Based on original design: SD.DAT[x].OE = !GP.nWR & !GP.AD[22] & !nSDOUT  
-    sd_dat_oe <= "1111" when sd_dat_write_active = '1' else "0000";
 
     -- SD Interface Controller Process / SD接口控制器进程
     -- Synchronous data registers only - control logic is combinatorial
@@ -522,7 +508,7 @@ begin
     begin
         if falling_edge(CLK50MHz) then
             if n_sd_mode_active = '0' then
-
+                -- 读写是否需要在不同时机采样
                 -- Handle GBA bus transactions for data registers only / 仅处理数据寄存器的GBA总线事务
                 if gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0' then
                     -- Start of GBA access cycle / GBA访问周期开始
@@ -580,24 +566,21 @@ begin
                     end case;
                 end if;
                 
-            else
-                -- SD mode inactive - reset all states / SD模式非激活 - 重置所有状态
-                sd_dat_out <= "1111";
-                sd_cmd_out <= '1';
-                dat_write_phase <= '0';
-                sd_io_buffer <= (others => '0');
+            -- else
+            --     SD mode inactive - reset all states / SD模式非激活 - 重置所有状态
+            --     sd_dat_out <= "1111";
+            --     sd_cmd_out <= '1';
+            --     dat_write_phase <= '0';
+            --     sd_io_buffer <= (others => '0');
             end if;
         end if;
     end process;
 
     -- Tri-state control for SD pins / SD引脚的三态控制
     -- CMD line: bidirectional with individual control / CMD线：双向个别控制
-    SD_CMD <= sd_cmd_out when sd_cmd_oe = '1' else 'Z';
+    SD_CMD <= sd_cmd_out when sd_cmd_write_active = '1' else 'Z';
     
     -- DAT lines: 4-bit parallel with individual enable control / DAT线：4位并行个别使能控制
-    SD_DAT(0) <= sd_dat_out(0) when sd_dat_oe(0) = '1' else 'Z';
-    SD_DAT(1) <= sd_dat_out(1) when sd_dat_oe(1) = '1' else 'Z';
-    SD_DAT(2) <= sd_dat_out(2) when sd_dat_oe(2) = '1' else 'Z';
-    SD_DAT(3) <= sd_dat_out(3) when sd_dat_oe(3) = '1' else 'Z';
+    SD_DAT <= sd_dat_out when sd_dat_write_active = '1' else (others => '0');
 
 end behavioral;
