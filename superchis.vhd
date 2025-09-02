@@ -519,15 +519,19 @@ begin
                             sd_read_buffer(0) <= SD_CMD;
                         when SD_ACCESS_READ =>
                             sd_read_buffer(11 downto 8) <= SD_DAT;
+                        when SD_ACCESS_WRITE =>
+                            if gba_bus_rd_sync = '0' then
+                                sd_read_buffer(11 downto 8) <= SD_DAT;
+                            end if;
                         when others =>
                             null;
                     end case;
                 elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1' then
                     case sd_access_type is
-                        when SD_ACCESS_WRITE =>
-                            sd_dat_output <= sd_output_shift_reg;
                         when SD_ACCESS_READ =>
                             sd_read_buffer <= sd_read_buffer(11 downto 0) & sd_read_buffer(15 downto 12);
+                        when SD_ACCESS_WRITE =>
+                            sd_dat_output <= sd_output_shift_reg;
                         when others =>
                             null;
                     end case;
