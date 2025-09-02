@@ -507,10 +507,7 @@ begin
                             when SD_ACCESS_CMD =>
                                 sd_cmd_output <= GP(7);
                             when SD_ACCESS_WRITE =>
-                                -- LSB or MSB?
-                                -- 第一阶段：直接输出高4位到SD卡
                                 sd_dat_output <= GP(7 downto 4);        -- 高4位直接输出
-                                -- 同时锁存低4位供第二阶段使用
                                 sd_output_shift_reg <= GP(3 downto 0);  -- 锁存低4位
                             when others =>
                                 null;
@@ -521,7 +518,7 @@ begin
                         when SD_ACCESS_CMD =>
                             sd_read_buffer(0) <= SD_CMD;
                         when SD_ACCESS_READ =>
-                            sd_read_buffer(15 downto 12) <= SD_DAT;
+                            sd_read_buffer(11 downto 8) <= SD_DAT;
                         when others =>
                             null;
                     end case;
@@ -530,14 +527,14 @@ begin
                         when SD_ACCESS_WRITE =>
                             sd_dat_output <= sd_output_shift_reg;
                         when SD_ACCESS_READ =>
-                            -- LSB or MSB?
-                            sd_read_buffer <= "0000" & sd_read_buffer(15 downto 4);
+                            sd_read_buffer <= sd_read_buffer(11 downto 0) & sd_read_buffer(15 downto 12);
                         when others =>
                             null;
                     end case;
                 end if;
             else
                 sd_cmd_output <= '1';                        -- CMD idle high (SD spec)
+                sd_dat_output <= "1111";                     -- DAT idle high (SD spec)
             end if;
         end if;
     end process;
