@@ -501,17 +501,21 @@ begin
             if n_sd_mode_active = '0' then
                 -- Once address_load falling edge, two consecutive rising edges of gba_bus_idle_sync will occur for SD_ACCESS_WRITE
                 -- 一次连续传输只会发送一次address_load下降，也就是说uint32_t写入，会是一次address_load下降，两次gba_bus_idle_sync上升
-                if address_load_sync2 = '1' and address_load_sync = '0' then
-                    case sd_access_type is
-                        when SD_ACCESS_CMD =>
-                            sd_cmd_output <= GP(7);
-                        when SD_ACCESS_WRITE =>
-                            -- LSB or MSB?
-                            sd_output_shift_reg <= GP(7 downto 4);
-                            sd_dat_output <= GP(3 downto 0);
-                        when others =>
-                            null;
-                    end case;
+                if address_load_sync2 = '1' then
+                    if address_load_sync = '0' then
+                        case sd_access_type is
+                            when SD_ACCESS_CMD =>
+                                sd_cmd_output <= GP(7);
+                            when SD_ACCESS_WRITE =>
+                                -- LSB or MSB?
+                                -- 第一阶段：直接输出高4位到SD卡
+                                sd_dat_output <= GP(7 downto 4);        -- 高4位直接输出
+                                -- 同时锁存低4位供第二阶段使用
+                                sd_output_shift_reg <= GP(3 downto 0);  -- 锁存低4位
+                            when others =>
+                                null;
+                        end case;
+                    end if;
                 elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
                     case sd_access_type is
                         when SD_ACCESS_CMD =>

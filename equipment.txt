@@ -1,0 +1,639 @@
+GLB 0 (A)
+// Macrocell 0
+SDRAM.A[2] = $SDRAM.A[2]
+$SDRAM.A[2].T = ($SDRAM.A[2] & mc_A5 & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[11]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[2]
+    ) ^ ($SDRAM.A[2] & !mc_A5 & !mc_B5 & mc_B9)
+$SDRAM.A[2].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 1
+$SDRAM.A[7].T = ($SDRAM.A[7] & mc_A5 & !mc_B6 & !mc_B9
+        | GP.AD[16] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[7]
+    ) ^ ($SDRAM.A[7] & !mc_A5 & !mc_B5 & mc_B9)
+$SDRAM.A[7].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 2
+SDRAM.A[5] = $SDRAM.A[5]
+$SDRAM.A[5].D = $SDRAM.A[5] & mc_A5 & mc_B6
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[14]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[5]
+        | mc_A5 & mc_B5 & !mc_B6 & !mc_B9
+        | $SDRAM.A[5] & !mc_A5 & !mc_B9
+        | $SDRAM.A[5] & mc_B5
+        | $SDRAM.A[5] & mc_A5 & mc_B9
+$SDRAM.A[5].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 3
+SDRAM_CTRL1.T = !mc_A5 & SDRAM_CTRL0 & mc_B5 & !mc_B6 & !mc_B9
+SDRAM_CTRL1.CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 4
+SDRAM.A[1] = $SDRAM.A[1]
+$SDRAM.A[1].T = ($SDRAM.A[1] & mc_A5 & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & !IADDR[10]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & !IADDR[1]
+    ) ^ (!$SDRAM.A[1] & !mc_A5 & !mc_B5 & mc_B9)
+$SDRAM.A[1].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 5
+mc_A5.D = mc_B5 & !mc_B6 & mc_B9 & !SDRAM_COUNTER[8]
+        | mc_B5 & !mc_B6 & mc_B9 & !SDRAM_COUNTER[7]
+        | !SDRAM_CTRL1 & !mc_A5 & !SDRAM_CTRL0 & !SDRAM_CTRL2 & !SDRAM_CTRL3 & mc_B5 & mc_B6 & SDRAM_COUNTER[8] & SDRAM_COUNTER[7]
+        | mc_B6 & mc_B9 & nSDRAM_SEL
+        | !mc_A5 & mc_B5 & mc_B6 & mc_B9
+        | mc_A5 & !mc_B6
+        | mc_A5 & !mc_B5
+        | mc_A5 & nSDRAM_SEL
+mc_A5.CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 6
+SDRAM.A[6] = $SDRAM.A[6]
+$SDRAM.A[6].T = (mc_A5 & $SDRAM.A[6] & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[15]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[6]
+    ) ^ (!mc_A5 & $SDRAM.A[6] & !mc_B5 & mc_B9)
+$SDRAM.A[6].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 7
+SDRAM_CTRL0.D = (!mc_A5 & mc_B5 & !mc_B6 & !mc_B9) ^ SDRAM_CTRL0
+SDRAM_CTRL0.CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 8
+SDRAM.A[0] = $SDRAM.A[0]
+$SDRAM.A[0].T = (mc_A5 & $SDRAM.A[0] & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[9]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[0]
+    ) ^ (!mc_A5 & $SDRAM.A[0] & !mc_B5 & mc_B9)
+$SDRAM.A[0].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 9
+SDRAM_CTRL2.T = SDRAM_CTRL1 & !mc_A5 & SDRAM_CTRL0 & mc_B5 & !mc_B6 & !mc_B9
+SDRAM_CTRL2.CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 10
+SDRAM.A[7] = $SDRAM.A[7]
+SDRAM_COUNTER[1].D = !SDRAM_COUNTER[1] & SDRAM_COUNTER[0]
+        | SDRAM_COUNTER[1] & !SDRAM_COUNTER[0]
+SDRAM_COUNTER[1].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 11
+SDRAM_CTRL3.T = SDRAM_CTRL1 & !mc_A5 & SDRAM_CTRL0 & SDRAM_CTRL2 & mc_B5 & !mc_B6 & !mc_B9
+SDRAM_CTRL3.CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 12
+SDRAM.A[10] = $SDRAM.A[10]
+SDRAM_COUNTER[0].D = !SDRAM_COUNTER[0]
+SDRAM_COUNTER[0].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 14
+SDRAM.A[8] = $SDRAM.A[8]
+$SDRAM.A[10].T = (!GP.AD[19] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+        | mc_A5 & !$SDRAM.A[10] & !mc_B5 & !mc_B6 & !mc_B9
+        | mc_A5 & $SDRAM.A[10] & mc_B5 & !mc_B6 & !mc_B9
+    ) ^ (!mc_A5 & !$SDRAM.A[10] & !mc_B5 & mc_B9)
+$SDRAM.A[10].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+// Macrocell 15
+$SDRAM.A[8].T = (mc_A5 & $SDRAM.A[8] & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & !IADDR[8]
+        | !GP.AD[17] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+    ) ^ (!mc_A5 & !$SDRAM.A[8] & !mc_B5 & mc_B9)
+$SDRAM.A[8].CLK = !CLK50Mhz // GLB 0 (A) BCLK 1
+ 
+GLB 1 (B)
+// Macrocell 0
+SDRAM.BA[1] = $SDRAM.BA[1]
+$SDRAM.BA[1].D = $SDRAM.BA[1] & mc_B5 & mc_B9
+        | $SDRAM.BA[1] & mc_B6 & !mc_B9
+        | GP.AD[23] & !mc_A5 & !mc_B5 & mc_B9
+        | !mc_A5 & $SDRAM.BA[1] & !mc_B9
+        | mc_A5 & $SDRAM.BA[1] & mc_B9
+$SDRAM.BA[1].CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 1
+$SDRAM.A[9].D = $SDRAM.A[9] & mc_B5 & mc_B9
+        | $SDRAM.A[9] & mc_B6 & !mc_B9
+        | GP.AD[18] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+        | !mc_A5 & $SDRAM.A[9] & !mc_B9
+        | mc_A5 & $SDRAM.A[9] & mc_B9
+$SDRAM.A[9].CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 2
+SDRAM.BA[0] = $SDRAM.BA[0]
+$SDRAM.BA[0].D = $SDRAM.BA[0] & mc_B5 & mc_B9
+        | $SDRAM.BA[0] & mc_B6 & !mc_B9
+        | GP.AD[22] & !mc_A5 & !mc_B5 & mc_B9
+        | !mc_A5 & $SDRAM.BA[0] & !mc_B9
+        | mc_A5 & $SDRAM.BA[0] & mc_B9
+$SDRAM.BA[0].CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 3
+$SDRAM.A[11].D = $SDRAM.A[11] & mc_B5 & mc_B9
+        | $SDRAM.A[11] & mc_B6 & !mc_B9
+        | GP.AD[20] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+        | !mc_A5 & $SDRAM.A[11] & !mc_B9
+        | mc_A5 & $SDRAM.A[11] & mc_B9
+$SDRAM.A[11].CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 4
+SDRAM.CKE = $SDRAM.CKE
+$SDRAM.CKE.D = (!mc_A5 | !mc_B5 | !mc_B6 | !nSDRAM_SEL | SDRAM_COUNTER[8])
+        & (!mc_A5 | !mc_B5 | !mc_B6 | !nSDRAM_SEL | SDRAM_COUNTER[7])
+$SDRAM.CKE.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 5
+mc_B5.D = (!mc_A5 & !mc_B9 & SDRAM_COUNTER[8] & SDRAM_COUNTER[7]
+        | mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & mc_E3 & mc_H0
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & !nSDRAM_SEL & !mc_H0
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & !mc_E3 & !nSDRAM_SEL
+        | !mc_A5 & mc_B5 & !mc_B9
+        | !mc_A5 & mc_B5 & !mc_B6 & SDRAM_COUNTER[8] & SDRAM_COUNTER[7]
+        | mc_B5 & !mc_B6 & !mc_B9
+        | mc_B5 & !mc_B9 & !nSDRAM_SEL
+        | mc_B5 & !mc_B9 & SDRAM_COUNTER[8] & SDRAM_COUNTER[7]
+    ) ^ (mc_A5 & mc_B6)
+mc_B5.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 6
+SDRAM.nRAS = $SDRAM.nRAS
+mc_B6.D = !mc_B5 & !mc_B6 & mc_E3 & mc_H0
+        | !mc_A5 & !mc_B6 & SDRAM_COUNTER[8] & SDRAM_COUNTER[7]
+        | mc_A5 & mc_B6 & !mc_B9 & nSDRAM_SEL
+        | !mc_A5 & !mc_B5 & mc_B9 & mc_E3 & !nSDRAM_SEL & mc_H0
+        | mc_A5 & mc_B5 & mc_B9
+        | !mc_A5 & !mc_B9 & !SDRAM_COUNTER[8]
+        | !mc_A5 & !mc_B5 & !mc_B6
+        | mc_A5 & !mc_B5 & !mc_B9
+        | !mc_A5 & !mc_B9 & !SDRAM_COUNTER[7]
+mc_B6.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 8
+SDRAM.nCAS = $SDRAM.nCAS
+mc_B8 = GP.AD[16] & GP.AD[17] & GP.AD[0] & GP.AD[1] & GP.AD[2] & GP.AD[3] & GP.AD[5] & GP.AD[10] & GP.AD[11] & GP.AD[18] & GP.AD[22] & GP.AD[21] & GP.AD[20] & GP.AD[19] & GP.AD[15] & GP.AD[13] & GP.AD[12] & GP.AD[23]
+// Macrocell 9
+mc_B9.D = (!mc_A5 | mc_B5 | mc_B6 | !mc_E3 | !mc_H0)
+        & (!mc_B6 | mc_B9 | !nSDRAM_SEL | SDRAM_COUNTER[8])
+        & (!mc_B6 | mc_B9 | !nSDRAM_SEL | SDRAM_COUNTER[7])
+        & (mc_A5 | mc_B5 | !mc_B6 | !nSDRAM_SEL)
+        & (!mc_A5 | !mc_B5 | !mc_B9)
+        & (mc_A5 | mc_B9)
+        & (mc_B5 | mc_B9)
+mc_B9.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 10
+SDRAM.nWE = $SDRAM.nWE
+$SDRAM.nWE.D = (mc_A5 | mc_B5 | !mc_B6 | !mc_B9 | mc_E3)
+        & (!mc_A5 | mc_B6 | mc_B9)
+$SDRAM.nWE.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 11
+config_sd_enable.D = GP.AD[1]
+config_sd_enable.CLK = GP_NWR // GLB 1 (B) BCLK 2
+config_sd_enable.CE = LOAD_IREG // GLB 1 (B) Shared PT Clock
+// Macrocell 12
+SDRAM.A[9] = $SDRAM.A[9]
+MAP_REG.D = GP.AD[0]
+MAP_REG.CLK = GP_NWR // GLB 1 (B) BCLK 2
+MAP_REG.CE = LOAD_IREG // GLB 1 (B) Shared PT Clock
+// Macrocell 13
+SDRAM.A[11] = $SDRAM.A[11]
+$SDRAM.nRAS.D = mc_B5 & !mc_B6 & mc_B9
+        | mc_A5 & !mc_B6 & mc_B9
+        | !mc_A5 & !mc_B5 & mc_B6
+        | mc_B6 & !mc_B9
+$SDRAM.nRAS.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 14
+$SDRAM.nCAS.D = mc_A5 & mc_B5 & mc_B9 & nSDRAM_SEL & !SDRAM_COUNTER[8]
+        | mc_A5 & mc_B5 & mc_B9 & nSDRAM_SEL & !SDRAM_COUNTER[7]
+        | !mc_B5 & !mc_B9
+        | !mc_A5 & !mc_B5 & mc_E3 & mc_H0
+        | mc_B6 & !mc_B9
+        | !mc_B6 & mc_B9
+$SDRAM.nCAS.CLK = !CLK50Mhz // GLB 1 (B) BCLK 1
+// Macrocell 15
+mc_B15.D = GP.AD[6] & !GP.AD[13] & GP.AD[12]
+mc_B15.CLK = GP_NWR // GLB 1 (B) BCLK 2
+mc_B15.CE = LOAD_IREG // GLB 1 (B) Shared PT Clock
+ 
+GLB 2 (C)
+// Macrocell 0
+$SDRAM.A[12].D = mc_B5 & mc_B9 & $SDRAM.A[12]
+        | mc_B6 & !mc_B9 & $SDRAM.A[12]
+        | GP.AD[21] & !mc_A5 & !mc_B5 & !mc_B6 & mc_B9
+        | !mc_A5 & !mc_B9 & $SDRAM.A[12]
+        | mc_A5 & mc_B9 & $SDRAM.A[12]
+$SDRAM.A[12].CLK = !CLK50Mhz // GLB 2 (C) BCLK 1
+// Macrocell 1
+$FLASH.A[1] = mc_B15 | IADDR[1]
+// Macrocell 2
+FLASH.A[5] = IADDR[2]
+IADDR[2].D = !IADDR[2] & IADDR[0] & IADDR[1] & !address_load
+        | IADDR[2] & !IADDR[0] & !address_load
+        | IADDR[2] & !IADDR[1] & !address_load
+        | GP.AD[2] & address_load
+IADDR[2].CLK = mc_H11 // GLB 2 (C) Shared PT Clock
+// Macrocell 3
+IADDR[4].T = IADDR[2] & IADDR[0] & IADDR[1] & IADDR[3] & !address_load
+        | !GP.AD[4] & IADDR[4] & address_load
+        | GP.AD[4] & !IADDR[4] & address_load
+IADDR[4].CLK = mc_H11 // GLB 2 (C) Shared PT Clock
+// Macrocell 4
+FLASH.A[2] = IADDR[6]
+IADDR[6].T = IADDR[2] & IADDR[4] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[3] & !address_load
+        | !GP.AD[6] & IADDR[6] & address_load
+        | GP.AD[6] & !IADDR[6] & address_load
+IADDR[6].CLK = mc_H11 // GLB 2 (C) Shared PT Clock
+// Macrocell 5
+FLASH.A[4] = IADDR[0]
+IADDR[0].D = !IADDR[0] & !address_load
+        | GP.AD[0] & address_load
+IADDR[0].CLK = mc_H11 // GLB 2 (C) Shared PT Clock
+// Macrocell 6
+FLASH.A[14] = $FLASH.A[14] = IADDR[14] | mc_G14
+// Macrocell 7
+IADDR[5].T = IADDR[2] & IADDR[4] & IADDR[0] & IADDR[1] & IADDR[3] & !address_load
+        | !GP.AD[5] & IADDR[5] & address_load
+        | GP.AD[5] & !IADDR[5] & address_load
+IADDR[5].CLK = mc_H11 // GLB 2 (C) Shared PT Clock
+// Macrocell 8
+FLASH.A[6] = $FLASH.A[6] = mc_C9 | IADDR[8]
+// Macrocell 9
+mc_C9.D = GP.AD[4] & !GP.AD[5] & GP.AD[14]
+mc_C9.CLK = GP_NWR // GLB 2 (C) BCLK 2
+mc_C9.CE = LOAD_IREG
+// Macrocell 10
+FLASH.A[3] = $FLASH.A[3]
+mc_C10.D = GP.AD[4] & !GP.AD[8] & GP.AD[12]
+mc_C10.CLK = GP_NWR // GLB 2 (C) BCLK 2
+mc_C10.CE = LOAD_IREG
+// Macrocell 11
+magic_address.D = GP.AD[4] & GP.AD[6] & GP.AD[7] & GP.AD[8] & GP.AD[9] & GP.AD[14] & mc_B8
+magic_address.CLK = !GP.nCS // GLB 2 (C) BCLK 0
+// Macrocell 12
+FLASH.A[1] = $FLASH.A[1]
+LOAD_IREG.D = GP.AD[4] & GP.AD[6] & GP.AD[7] & GP.AD[8] & GP.AD[9] & GP.AD[14] & mc_B8 & mc_G1
+LOAD_IREG.CLK = !GP.nCS // GLB 2 (C) BCLK 0
+// Macrocell 13
+mc_C13.D = GP.AD[4] & GP.AD[6] & GP.AD[7] & GP.AD[8] & GP.AD[9] & GP.AD[14] & mc_B8 & mc_G2
+mc_C13.CLK = !GP.nCS // GLB 2 (C) BCLK 0
+// Macrocell 14
+SDRAM.A[12] = $SDRAM.A[12]
+mc_C14.D = true
+mc_C14.CLK = false
+// Macrocell 15
+$FLASH.A[3] = (mc_B15 | IADDR[5] | mc_C9)
+ 
+GLB 3 (D)
+// Macrocell 0
+FLASH.A[15] = $FLASH.A[15] = mc_C10 | IADDR[15] | mc_D9 | mc_G14
+// Macrocell 1
+$FLASH.A[7] = IADDR[4] | mc_C10
+// Macrocell 2
+FLASH.A[11] = $FLASH.A[11] = IADDR[11] | mc_D9
+// Macrocell 3
+IADDR[1].D = !IADDR[0] & IADDR[1] & !address_load
+        | IADDR[0] & !IADDR[1] & !address_load
+        | GP.AD[1] & address_load
+IADDR[1].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 4
+FLASH.A[8] = IADDR[3]
+IADDR[8].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[3] & IADDR[7] & !address_load
+        | !GP.AD[8] & IADDR[8] & address_load
+        | GP.AD[8] & !IADDR[8] & address_load
+IADDR[8].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 5
+IADDR[9].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[3] & IADDR[7] & !address_load
+        | !GP.AD[9] & IADDR[9] & address_load
+        | GP.AD[9] & !IADDR[9] & address_load
+IADDR[9].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 6
+FLASH.A[13] = IADDR[13]
+IADDR[11].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[3] & IADDR[10] & IADDR[7] & !address_load
+        | !GP.AD[11] & IADDR[11] & address_load
+        | GP.AD[11] & !IADDR[11] & address_load
+IADDR[11].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 7
+IADDR[14].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[11] & IADDR[3] & IADDR[13] & IADDR[12] & IADDR[10] & IADDR[7] & !address_load
+        | !GP.AD[14] & IADDR[14] & address_load
+        | GP.AD[14] & !IADDR[14] & address_load
+IADDR[14].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 8
+FLASH.A[12] = IADDR[12]
+IADDR[15].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[11] & IADDR[14] & IADDR[3] & IADDR[13] & IADDR[12] & IADDR[10] & IADDR[7] & !address_load
+        | !GP.AD[15] & IADDR[15] & address_load
+        | GP.AD[15] & !IADDR[15] & address_load
+IADDR[15].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 9
+mc_D9.D = GP.AD[7] & GP.AD[9] & !GP.AD[15]
+mc_D9.CLK = GP_NWR // GLB 3 (D) BCLK 2
+mc_D9.CE = LOAD_IREG
+// Macrocell 10
+FLASH.A[10] = IADDR[10]
+mc_D10.D = false
+mc_D10.CLK = false
+// Macrocell 11
+IADDR[3].D = (GP.AD[3] & address_load
+        | IADDR[2] & IADDR[0] & IADDR[1] & !address_load
+    ) ^ (IADDR[3] & !address_load)
+IADDR[3].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 12
+FLASH.A[0] = IADDR[7]
+IADDR[13].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[11] & IADDR[3] & IADDR[12] & IADDR[10] & IADDR[7] & !address_load
+        | !GP.AD[13] & IADDR[13] & address_load
+        | GP.AD[13] & !IADDR[13] & address_load
+IADDR[13].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 13
+FLASH.A[7] = $FLASH.A[7]
+IADDR[12].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[11] & IADDR[3] & IADDR[10] & IADDR[7] & !address_load
+        | !GP.AD[12] & IADDR[12] & address_load
+        | GP.AD[12] & !IADDR[12] & address_load
+IADDR[12].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 14
+IADDR[10].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[8] & IADDR[9] & IADDR[3] & IADDR[7] & !address_load
+        | !GP.AD[10] & IADDR[10] & address_load
+        | GP.AD[10] & !IADDR[10] & address_load
+IADDR[10].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+// Macrocell 15
+IADDR[7].T = IADDR[2] & IADDR[4] & IADDR[6] & IADDR[0] & IADDR[5] & IADDR[1] & IADDR[3] & !address_load
+        | !GP.AD[7] & IADDR[7] & address_load
+        | GP.AD[7] & !IADDR[7] & address_load
+IADDR[7].CLK = mc_H11 // GLB 3 (D) Shared PT Clock
+ 
+GLB 4 (E)
+// Macrocell 0
+FLASH.A[9] = $FLASH.A[9]
+SD.reg2[1].D = (!GP.AD[22] | SD.reg2[0] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[22] | SD.reg1[2] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[2] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | SD.reg2[1] | !address_load_sync2)
+        & (SD.reg2[1] | address_load_sync2 | gba_bus_idle_sync)
+        & (SD.reg2[1] | address_load_sync2 | !gba_bus_idle_sync_d1)
+SD.reg2[1].CLK = !CLK50Mhz // GLB 4 (E) BCLK 1
+// Macrocell 1
+n_sd_mode_active = GP.nCS | !GP.AD[23] | !config_sd_enable | magic_address
+// Macrocell 2
+FLASH.nCE = $FLASH.nCE
+SD.reg2[2].D = (!GP.AD[22] | SD.reg2[1] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[22] | SD.reg1[3] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[3] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | SD.reg2[2] | !address_load_sync2)
+        & (SD.reg2[2] | address_load_sync2 | gba_bus_idle_sync)
+        & (SD.reg2[2] | address_load_sync2 | !gba_bus_idle_sync_d1)
+SD.reg2[2].CLK = !CLK50Mhz // GLB 4 (E) BCLK 1
+// Macrocell 3
+mc_E3.D = GP_NWR | !WRITE_ENABLE
+mc_E3.CLK = CLK50Mhz // GLB 4 (E) Shared PT Clock
+// Macrocell 4
+FLASH_SRAM_nWE = $FLASH_SRAM_nWE
+nSDRAM_SEL.D = (GP.nCS | config_sd_enable | !MAP_REG)
+        & (GP.nCS | GP.AD[23] | !MAP_REG)
+nSDRAM_SEL.CLK = CLK50Mhz // GLB 4 (E) Shared PT Clock
+// Macrocell 6
+FLASH_SRAM_nOE = $FLASH_SRAM_nOE
+$FLASH.nCE = (GP.nCS | clk3 | config_sd_enable | MAP_REG)
+        & (GP.nCS | clk3 | GP.AD[23] | MAP_REG)
+// Macrocell 7
+$FLASH.A[9] = IADDR[9] & WRITE_ENABLE
+// Macrocell 8
+GP.AD[0].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[0] = sd_io_buffer[0] = !GP.AD[22] & SD.reg1[0]
+        | GP.AD[22] & SD.CMD
+// Macrocell 9
+$FLASH_SRAM_nWE = GP_NWR
+// Macrocell 10
+GP.AD[1].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[1] = sd_io_buffer[1] = !GP.AD[22] & SD.reg1[1]
+        | GP.AD[22] & SD.reg1[4]
+// Macrocell 11
+$FLASH_SRAM_nOE = GP_NRD
+// Macrocell 12
+GP.AD[2].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[2] = sd_io_buffer[2] = !GP.AD[22] & SD.reg1[2]
+        | GP.AD[22] & SD.reg2[0]
+// Macrocell 13
+SD.reg1[4].D = (SD.reg1[4] | address_load_sync2 | !gba_bus_idle_sync_d1)
+        & (GP.AD[22] | SD.reg1[0] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[0] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[22] | SD.CMD | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (!GP.AD[19] | SD.reg1[4] | !address_load_sync2)
+        & (SD.reg1[4] | address_load_sync2 | gba_bus_idle_sync)
+SD.reg1[4].CLK = !CLK50Mhz // GLB 4 (E) BCLK 1
+// Macrocell 14
+GP.AD[3].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[3] = sd_io_buffer[3] = !GP.AD[22] & SD.reg1[3]
+        | GP.AD[22] & SD.reg2[1]
+// Macrocell 15
+SD.reg1[3].T = (!GP.AD[19] & !SD.reg1[3] & address_load_sync2
+        | !GP.AD[22] & !SD.reg1[3] & SD.reg2[5] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & SD.reg1[3] & !SD.reg2[5] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[19] & !GP.AD[15] & address_load_sync2 & !address_load_sync)
+SD.reg1[3].CLK = !CLK50Mhz // GLB 4 (E) BCLK 1
+ 
+GLB 5 (F)
+// Macrocell 0
+GP.AD[4].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[4] = sd_io_buffer[4]
+SD.reg2[6].T = (!GP.AD[19] & !SD.reg2[6] & address_load_sync2
+        | !GP.AD[22] & SD.DAT[2] & !SD.reg2[6] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & !SD.DAT[2] & SD.reg2[6] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[10] & !GP.AD[19] & address_load_sync2 & !address_load_sync)
+SD.reg2[6].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 1
+SD.reg2[5].T = (!GP.AD[19] & !SD.reg2[5] & address_load_sync2
+        | !GP.AD[22] & SD.DAT[3] & !SD.reg2[5] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & !SD.DAT[3] & SD.reg2[5] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[11] & !GP.AD[19] & address_load_sync2 & !address_load_sync)
+SD.reg2[5].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 2
+GP.AD[5].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[5] = sd_io_buffer[5]
+sd_io_buffer[4] = !GP.AD[22] & SD.reg1[4]
+        | GP.AD[22] & SD.reg2[2]
+// Macrocell 3
+sd_io_buffer[5] = GP.AD[22] & $SD.DAT[0]
+        | !GP.AD[22] & SD.reg2[0]
+// Macrocell 4
+GP.AD[6].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[6] = sd_io_buffer[6] = GP.AD[22] & SD.reg1[5]
+        | !GP.AD[22] & SD.reg2[1]
+// Macrocell 5
+SD.reg2[0].D = (!GP.AD[22] | SD.reg1[4] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[22] | SD.reg1[1] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[1] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | SD.reg2[0] | !address_load_sync2)
+        & (SD.reg2[0] | address_load_sync2 | gba_bus_idle_sync)
+        & (SD.reg2[0] | address_load_sync2 | !gba_bus_idle_sync_d1)
+SD.reg2[0].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 6
+GP.AD[7].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[7] = sd_io_buffer[7] = GP.AD[22] & SD.reg1[6]
+        | !GP.AD[22] & SD.reg2[2]
+// Macrocell 7
+SD.reg1[0].T = (!GP.AD[19] & !SD.reg1[0] & address_load_sync2
+        | !GP.AD[22] & !SD.reg1[0] & mc_F14 & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & SD.reg1[0] & !mc_F14 & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[19] & !GP.AD[12] & address_load_sync2 & !address_load_sync)
+SD.reg1[0].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 8
+GP.AD[8].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[8] = sd_io_buffer[8] = clk3 & GP.AD[22]
+        | !GP.AD[22] & SD.DAT[0]
+// Macrocell 9
+SD.reg1[1].T = (!GP.AD[19] & !SD.reg1[1] & address_load_sync2
+        | !GP.AD[22] & !SD.reg1[1] & SD.reg2[7] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & SD.reg1[1] & !SD.reg2[7] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[19] & !GP.AD[13] & address_load_sync2 & !address_load_sync)
+SD.reg1[1].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 10
+GP.AD[9].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[9] = sd_io_buffer[9] = !GP.AD[22] & SD.DAT[1]
+// Macrocell 11
+SD.reg1[2].T = (!GP.AD[19] & !SD.reg1[2] & address_load_sync2
+        | !GP.AD[22] & SD.reg2[6] & !SD.reg1[2] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & !SD.reg2[6] & SD.reg1[2] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[19] & !GP.AD[14] & address_load_sync2 & !address_load_sync)
+SD.reg1[2].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 12
+GP.AD[10].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[10] = sd_io_buffer[10] = GP.AD[22] | SD.DAT[2]
+// Macrocell 13
+GP.AD[11].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[11] = sd_io_buffer[11] = (GP.AD[22] | SD.DAT[3])
+// Macrocell 14
+mc_F14.T = (!GP.AD[19] & !mc_F14 & address_load_sync2
+        | !GP.AD[22] & SD.DAT[0] & !mc_F14 & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & !SD.DAT[0] & mc_F14 & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[8] & !GP.AD[19] & address_load_sync2 & !address_load_sync)
+mc_F14.CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+// Macrocell 15
+SD.reg2[7].T = (!GP.AD[19] & !SD.reg2[7] & address_load_sync2
+        | !GP.AD[22] & SD.DAT[1] & !SD.reg2[7] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+        | !GP.AD[22] & !SD.DAT[1] & SD.reg2[7] & !address_load_sync2 & !gba_bus_idle_sync_d1 & gba_bus_idle_sync
+    ) ^ (!GP.AD[9] & !GP.AD[19] & address_load_sync2 & !address_load_sync)
+SD.reg2[7].CLK = !CLK50Mhz // GLB 5 (F) BCLK 1
+ 
+GLB 6 (G)
+// Macrocell 0
+SDRAM_COUNTER[5].T = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & SDRAM_COUNTER[3] & SDRAM_COUNTER[2] & SDRAM_COUNTER[4]
+SDRAM_COUNTER[5].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+// Macrocell 1
+mc_G1.D = !GP.AD[0] & GP.AD[1] & !GP.AD[2] & GP.AD[3] & GP.AD[4] & !GP.AD[5] & GP.AD[6] & !GP.AD[7] & GP.AD[8] & !GP.AD[9] & GP.AD[10] & !GP.AD[11] & mc_C13
+mc_G1.CLK = GP_NWR // GLB 6 (G) BCLK 2
+// Macrocell 2
+mc_G2.D = !GP.AD[0] & GP.AD[1] & !GP.AD[2] & GP.AD[3] & GP.AD[4] & !GP.AD[5] & GP.AD[6] & !GP.AD[7] & GP.AD[8] & !GP.AD[9] & GP.AD[10] & !GP.AD[11] & magic_address
+mc_G2.CLK = GP_NWR // GLB 6 (G) BCLK 2
+// Macrocell 4
+sd_io_buffer[12] = (GP.AD[22] | mc_F14)
+// Macrocell 5
+SDRAM_COUNTER[3].D = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & !SDRAM_COUNTER[3] & SDRAM_COUNTER[2]
+        | !SDRAM_COUNTER[1] & SDRAM_COUNTER[3]
+        | SDRAM_COUNTER[3] & !SDRAM_COUNTER[2]
+        | !SDRAM_COUNTER[0] & SDRAM_COUNTER[3]
+SDRAM_COUNTER[3].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+// Macrocell 6
+GP.AD[15].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[15] = sd_io_buffer[15] = GP.AD[22] | SD.reg2[5]
+// Macrocell 7
+SDRAM_COUNTER[2].D = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & !SDRAM_COUNTER[2]
+        | !SDRAM_COUNTER[1] & SDRAM_COUNTER[2]
+        | !SDRAM_COUNTER[0] & SDRAM_COUNTER[2]
+SDRAM_COUNTER[2].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+// Macrocell 8
+SRAM.A16 = WRITE_ENABLE
+WRITE_ENABLE.D = GP.AD[2]
+WRITE_ENABLE.CLK = GP_NWR // GLB 6 (G) BCLK 2
+WRITE_ENABLE.CE = LOAD_IREG // GLB 6 (G) Shared PT Clock
+// Macrocell 9
+SDRAM_COUNTER[8].T = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & SDRAM_COUNTER[5] & SDRAM_COUNTER[3] & SDRAM_COUNTER[2] & SDRAM_COUNTER[7] & SDRAM_COUNTER[4] & SDRAM_COUNTER[6]
+SDRAM_COUNTER[8].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+SDRAM_COUNTER[8].AR = $SDRAM.CKE & $SDRAM.nWE & !$SDRAM.nRAS & !$SDRAM.nCAS
+// Macrocell 10
+GP.AD[14].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[14] = sd_io_buffer[14] = GP.AD[22] | SD.reg2[6]
+// Macrocell 11
+SDRAM_COUNTER[7].T = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & SDRAM_COUNTER[5] & SDRAM_COUNTER[3] & SDRAM_COUNTER[2] & SDRAM_COUNTER[4] & SDRAM_COUNTER[6]
+SDRAM_COUNTER[7].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+SDRAM_COUNTER[7].AR = $SDRAM.CKE & $SDRAM.nWE & !$SDRAM.nRAS & !$SDRAM.nCAS
+// Macrocell 12
+GP.AD[13].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[13] = sd_io_buffer[13] = GP.AD[22] | SD.reg2[7]
+// Macrocell 13
+SDRAM_COUNTER[4].D = SDRAM_COUNTER[4] ^ (SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & SDRAM_COUNTER[3] & SDRAM_COUNTER[2])
+SDRAM_COUNTER[4].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+// Macrocell 14
+GP.AD[12].OE = !GP_NRD & !n_sd_mode_active // GLB 4 Shared OE PT
+GP.AD[12] = sd_io_buffer[12]
+mc_G14.D = GP.AD[7] & !GP.AD[10] & GP.AD[11]
+mc_G14.CLK = GP_NWR // GLB 6 (G) BCLK 2
+mc_G14.CE = LOAD_IREG // GLB 6 (G) Shared PT Clock
+// Macrocell 15
+SDRAM_COUNTER[6].T = SDRAM_COUNTER[1] & SDRAM_COUNTER[0] & SDRAM_COUNTER[5] & SDRAM_COUNTER[3] & SDRAM_COUNTER[2] & SDRAM_COUNTER[4]
+SDRAM_COUNTER[6].CLK = !CLK50Mhz // GLB 6 (G) BCLK 1
+ 
+GLB 7 (H)
+// Macrocell 0
+SDRAM.A[4] = $SDRAM.A[4]
+mc_H0.D = GP_NRD
+mc_H0.CLK = CLK50Mhz // GLB 7 (H) Shared PT Clock
+// Macrocell 1
+$SD.CLK = GP_NWR & GP_NRD
+        | n_sd_mode_active
+// Macrocell 2
+SDRAM.A[3] = $SDRAM.A[3]
+$SDRAM.A[4].D = mc_A5 & mc_B6 & $SDRAM.A[4]
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[13]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[4]
+        | mc_A5 & mc_B5 & !mc_B6 & !mc_B9
+        | !mc_A5 & !mc_B9 & $SDRAM.A[4]
+        | mc_B5 & $SDRAM.A[4]
+        | mc_A5 & mc_B9 & $SDRAM.A[4]
+$SDRAM.A[4].CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 3
+$SD.DAT[0].D = (!GP.AD[22] | SD.reg2[2] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[22] | SD.reg1[4] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[4] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | $SD.DAT[0] | !address_load_sync2)
+        & ($SD.DAT[0] | address_load_sync2 | gba_bus_idle_sync)
+        & ($SD.DAT[0] | address_load_sync2 | !gba_bus_idle_sync_d1)
+$SD.DAT[0].CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 4
+SD.DAT[2].OE = !GP_NWR & !GP.AD[22] & !n_sd_mode_active // GLB 6 Shared OE PT
+SD.DAT[2] = SD.reg1[6]
+$SDRAM.A[3].T = (mc_A5 & !mc_B6 & !mc_B9 & $SDRAM.A[3]
+        | !mc_A5 & !mc_B5 & mc_B6 & mc_B9 & IADDR[3]
+        | !mc_A5 & !mc_B5 & !mc_B6 & mc_B9 & IADDR[12]
+    ) ^ (!mc_A5 & !mc_B5 & mc_B9 & $SDRAM.A[3])
+$SDRAM.A[3].CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 5
+address_load_sync2.D = address_load_sync
+address_load_sync2.CLK = CLK50Mhz // GLB 7 (H) Shared PT Clock
+// Macrocell 6
+SD.DAT[3].OE = !GP_NWR & !GP.AD[22] & !n_sd_mode_active // GLB 6 Shared OE PT
+SD.DAT[3] = $SD.DAT[3] = mc_H9
+// Macrocell 7
+SD.reg1[6].D = (GP.AD[22] | SD.reg2[1] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (!GP.AD[22] | address_load_sync2 | SD.reg1[5] | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[6] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | !address_load_sync2 | SD.reg1[6])
+        & (address_load_sync2 | SD.reg1[6] | gba_bus_idle_sync)
+        & (address_load_sync2 | SD.reg1[6] | !gba_bus_idle_sync_d1)
+SD.reg1[6].CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 8
+SD.CMD.OE = !GP_NWR & GP.AD[22] & !n_sd_mode_active // GLB 7 Shared OE PT
+SD.CMD = $SD.CMD = mc_H9
+// Macrocell 9
+mc_H9.D = (GP.AD[22] | SD.reg2[2] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (!GP.AD[22] | address_load_sync2 | SD.reg1[6] | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[7] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | !address_load_sync2 | mc_H9)
+        & (address_load_sync2 | mc_H9 | gba_bus_idle_sync)
+        & (address_load_sync2 | mc_H9 | !gba_bus_idle_sync_d1)
+mc_H9.CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 10
+SD.CLK = $SD.CLK
+address_load_sync.D = address_load
+address_load_sync.CLK = CLK50Mhz // GLB 7 (H) Shared PT Clock
+// Macrocell 11
+mc_H11 = !GP.nCS & GP_NWR & GP_NRD
+        | GP.nCS & !GP_NRD
+        | GP.nCS & !GP_NWR
+// Macrocell 12
+SD.DAT[0].OE = !GP_NWR & !GP.AD[22] & !n_sd_mode_active // GLB 6 Shared OE PT
+SD.DAT[0] = $SD.DAT[0]
+address_load = GP_NWR & GP_NRD & address_load
+        | GP.nCS
+// Macrocell 13
+SD.DAT[1].OE = !GP_NWR & !GP.AD[22] & !n_sd_mode_active // GLB 6 Shared OE PT
+SD.DAT[1] = SD.reg1[5]
+SD.reg1[5].D = (GP.AD[22] | SD.reg2[0] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (!GP.AD[22] | $SD.DAT[0] | address_load_sync2 | gba_bus_idle_sync_d1 | !gba_bus_idle_sync)
+        & (GP.AD[5] | GP.AD[19] | !address_load_sync2 | address_load_sync)
+        & (!GP.AD[19] | !address_load_sync2 | SD.reg1[5])
+        & (address_load_sync2 | SD.reg1[5] | gba_bus_idle_sync)
+        & (address_load_sync2 | SD.reg1[5] | !gba_bus_idle_sync_d1)
+SD.reg1[5].CLK = !CLK50Mhz // GLB 7 (H) BCLK 1
+// Macrocell 14
+gba_bus_idle_sync_d1.D = gba_bus_idle_sync
+gba_bus_idle_sync_d1.CLK = CLK50Mhz // GLB 7 (H) Shared PT Clock
+// Macrocell 15
+gba_bus_idle_sync.D = GP_NWR & GP_NRD
+gba_bus_idle_sync.CLK = CLK50Mhz // GLB 7 (H) Shared PT Clock
