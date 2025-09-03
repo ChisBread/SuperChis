@@ -5,7 +5,6 @@ SuperChis is a open-source CPLD implementation project designed to reverse engin
 ## Project Features
 
 - 🔧 **Open Source**: Complete VHDL source code and hardware design files
-- 🔍 **Reverse Engineering**: Aims to understand and replicate SuperCard functionality
 - 🎮 **GBA Compatible**: Compatibility with Game Boy Advance and NDS
 - 💾 **Multi-Storage Support**: DDR SDRAM, Flash memory, and SRAM support
 - 💾 **SD Card Interface**: Integrated SD card interface for mass storage
