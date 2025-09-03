@@ -19,11 +19,6 @@ SuperChis is an open-source CPLD implementation project designed to understand t
 - **SRAM**: Static RAM for save data
 - **SD Card Interface**: External storage expansion support
 
-### Interface Description
-- **GBA Interface**: 16-bit data bus + 8-bit address bus
-- **Memory Interface**: Unified interface supporting multiple memory types
-- **Configuration Interface**: System configuration through special addresses
-
 ## File Structure
 
 ```
