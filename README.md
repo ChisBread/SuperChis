@@ -34,7 +34,21 @@ SuperChis is a open-source CPLD implementation project designed to reverse engin
 
 ## License
 
-This project is released under an open source license. Please see the LICENSE file in the project root for specific license information.
+This project is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)** license.
+
+### What this means:
+
+- ✅ **Educational and Research Use**: Free to use for learning, research, and educational purposes
+- ✅ **Open Source**: Source code is freely available and can be modified
+- ✅ **Attribution Required**: Must credit the original author when using or sharing
+- ✅ **Share Alike**: Derivative works must use the same license
+- ⚠️ **Commercial Use Restricted**: Commercial use requires separate licensing agreement
+
+### Commercial Licensing
+
+For commercial use, including manufacturing hardware or integrating into commercial products, please contact us for a separate commercial license agreement through GitHub Issues.
+
+See the [LICENSE](LICENSE) file for complete license terms.
 
 ## References
 
