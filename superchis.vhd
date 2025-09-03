@@ -406,15 +406,6 @@ begin
                             ddr_ba_reg <= GP_23 & GP_22;
                             ddr_cycle_counter <= (others => '0');
                         elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
-                            -- cycle 1~3
-                            -- 同一行，直接读写
-                            ddr_ras_reg <= '1';
-                            ddr_cas_reg <= '0';
-                            ddr_we_reg  <= gba_bus_wr_sync;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
-                            -- 列地址
-                            ddr_addr_reg(12 downto 9) <= (others => '0');
-                            ddr_addr_reg(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
-                            ddr_ba_reg <= GP_23 & GP_22;
                             if ddr_cycle_counter > x"3" then
                                 -- 预充电：RAS=0, CAS=1, WE=0
                                 ddr_ras_reg <= '0';
@@ -423,6 +414,16 @@ begin
                                 ddr_addr_reg <= (others => '0');
                                 ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
                                 ddr_ba_reg <= (others => '0');
+                            else
+                                -- cycle 1~3
+                                -- 同一行，直接读写
+                                ddr_ras_reg <= '1';
+                                ddr_cas_reg <= '0';
+                                ddr_we_reg  <= gba_bus_wr_sync;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
+                                -- 列地址
+                                ddr_addr_reg(12 downto 9) <= (others => '0');
+                                ddr_addr_reg(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
+                                ddr_ba_reg <= GP_23 & GP_22;
                             end if;
                         elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1' then
                             -- 预充电：RAS=0, CAS=1, WE=0
@@ -513,7 +514,7 @@ begin
                                 null;
                         end case;
                     end if;
-                elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
+                elsif gba_bus_idle_sync = '0' then
                     case sd_access_type is
                         when SD_ACCESS_CMD =>
                             sd_read_buffer(0) <= SD_CMD;
