@@ -53,5 +53,3 @@ See the [LICENSE](LICENSE) file for complete license terms.
 
 1. [gba-supercard-cpld](https://github.com/davidgfnet/gba-supercard-cpld) - Original CPLD implementation reference
 2. [SuperFW](https://github.com/davidgfnet/superfw) - SuperCard firmware reference
-3. GBA technical documentation and hardware specifications
-4. DDR SDRAM controller design references
