@@ -1,6 +1,6 @@
 # SuperChis
 
-SuperChis is a open-source CPLD implementation project designed to reverse engineer and understand the principles behind the original SuperCard flash cartridge for Game Boy Advance. This project provides complete VHDL source code and associated development tools for educational and research purposes.
+SuperChis is an open-source CPLD implementation project designed to understand the principles behind the original SuperCard-like flash carts used in the Game Boy Advance. The project provides complete VHDL source code for educational and research purposes.
 
 ## Project Features
 
