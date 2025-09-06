@@ -406,7 +406,7 @@ begin
                             ddr_ba_reg <= GP_23 & GP_22;
                             ddr_cycle_counter <= (others => '0');
                         elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
-                            if ddr_cycle_counter > x"3" then
+                            if ddr_cycle_counter > x"2" then
                                 -- 预充电：RAS=0, CAS=1, WE=0
                                 ddr_ras_reg <= '0';
                                 ddr_cas_reg <= '1';
