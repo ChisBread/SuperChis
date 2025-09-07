@@ -380,13 +380,14 @@ begin
                 when SDRAM_IDLE =>
                     -- 检查GBA访问请求
                     -- 刷新计数器
+                    ddr_cycle_counter <= ddr_cycle_counter + 1;
                     refresh_counter <= refresh_counter + 1;
                     if refresh_counter >= REFRESH_INTERVAL then
                         refresh_counter <= (others => '0');
                         refresh_needed <= '1';
                     end if;
                     -- 检查是否需要刷新
-                    if refresh_needed = '1' and n_ddr_sel = '1' then
+                    if refresh_needed = '1' and (n_ddr_sel = '1' or (gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1')) then
                         -- 刷新：RAS=0, CAS=0, WE=1
                         ddr_ras_reg <= '0';
                         ddr_cas_reg <= '0';
@@ -394,10 +395,8 @@ begin
                         ddr_addr_reg <= (others => '0');
                         ddr_ba_reg <= (others => '0');
                         refresh_needed <= '0';
-                    elsif n_ddr_sel = '0' then
-                        ddr_cycle_counter <= ddr_cycle_counter + 1;
-                        if gba_bus_idle_sync_d1 = '1' and gba_bus_idle_sync = '0' then
-                            -- cycle 0
+                    elsif n_ddr_sel = '0' and gba_bus_idle_sync = '0' then
+                        if gba_bus_idle_sync_d1 = '1' then
                             ddr_ras_reg <= '0';
                             ddr_cas_reg <= '1';
                             ddr_we_reg  <= '1';
@@ -405,34 +404,16 @@ begin
                                         std_logic_vector(internal_address(15 downto 9));
                             ddr_ba_reg <= GP_23 & GP_22;
                             ddr_cycle_counter <= (others => '0');
-                        elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '0' then
-                            if ddr_cycle_counter > x"2" then
-                                -- 预充电：RAS=0, CAS=1, WE=0
-                                ddr_ras_reg <= '0';
-                                ddr_cas_reg <= '1';
-                                ddr_we_reg  <= '0';
-                                ddr_addr_reg <= (others => '0');
-                                ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
-                                ddr_ba_reg <= (others => '0');
-                            else
-                                -- cycle 1~3
-                                -- 同一行，直接读写
-                                ddr_ras_reg <= '1';
-                                ddr_cas_reg <= '0';
-                                ddr_we_reg  <= gba_bus_wr_sync;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
-                                -- 列地址
-                                ddr_addr_reg(12 downto 9) <= (others => '0');
-                                ddr_addr_reg(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
-                                ddr_ba_reg <= GP_23 & GP_22;
-                            end if;
-                        elsif gba_bus_idle_sync_d1 = '0' and gba_bus_idle_sync = '1' then
-                            -- 预充电：RAS=0, CAS=1, WE=0
-                            ddr_ras_reg <= '0';
-                            ddr_cas_reg <= '1';
-                            ddr_we_reg  <= '0';
-                            ddr_addr_reg <= (others => '0');
-                            ddr_addr_reg(10) <= '1';  -- A10=1预充电所有Bank
-                            ddr_ba_reg <= (others => '0');
+                        elsif gba_bus_idle_sync_d1 = '0' and ddr_cycle_counter <= x"2" then
+                            -- 同一行，直接读写
+                            ddr_ras_reg <= '1';
+                            ddr_cas_reg <= '0';
+                            ddr_we_reg  <= gba_bus_wr_sync;  -- 写保护：当config_write_enable=0时强制WE=1(禁写)
+                            -- 列地址
+                            ddr_addr_reg(12 downto 9) <= (others => '0');
+                            ddr_addr_reg(10) <= '1';
+                            ddr_addr_reg(8 downto 0) <= std_logic_vector(internal_address(8 downto 0));
+                            ddr_ba_reg <= GP_23 & GP_22;
                         else
                             -- 空闲状态，NOP命令
                             ddr_ras_reg <= '1';
