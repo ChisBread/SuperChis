@@ -395,7 +395,7 @@ begin
                         ddr_addr_reg <= (others => '0');
                         ddr_ba_reg <= (others => '0');
                         refresh_needed <= '0';
-                    elsif n_ddr_sel = '0' and gba_bus_idle_sync = '0' then
+                    elsif n_ddr_sel = '0' and (gba_bus_wr_sync = '0' or gba_bus_rd_sync = '0') then
                         if gba_bus_idle_sync_d1 = '1' then
                             ddr_ras_reg <= '0';
                             ddr_cas_reg <= '1';
