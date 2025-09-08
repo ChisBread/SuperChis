@@ -370,7 +370,7 @@ begin
                 -- =============================================================
                 when SDRAM_IDLE =>
                     -- 检查是否有DDR访问请求
-                    if n_ddr_sel = '0' and (gba_bus_wr_sync = '0' or gba_bus_rd_sync = '0') then
+                    if n_ddr_sel = '0' then
                         next_state := SDRAM_ACTIVATE;
                     elsif refresh_needed = '1' and n_ddr_sel = '1' then
                         next_state := SDRAM_REFRESH;
@@ -382,16 +382,20 @@ begin
                 when SDRAM_REFRESH =>
                     if state_counter >= tRC_CYCLES then
                         refresh_needed <= '0';
-                        next_state := SDRAM_IDLE;
+                        if n_ddr_sel = '0' then
+                            next_state := SDRAM_ACTIVATE;
+                        else
+                            next_state := SDRAM_IDLE;
+                        end if;
                     end if;
                 
                 -- =============================================================
                 -- 行激活状态
                 -- =============================================================
                 when SDRAM_ACTIVATE =>
-                    if n_ddr_sel = '1' or (gba_bus_wr_sync = '1' and gba_bus_rd_sync = '1') then
+                    if n_ddr_sel = '1' then
                         next_state := SDRAM_PRECHARGE;
-                    elsif state_counter >= tRCD_CYCLES then
+                    elsif state_counter >= tRCD_CYCLES and (gba_bus_wr_sync = '0' or gba_bus_rd_sync = '0') then
                         next_state := SDRAM_READ_WRITE;
                     end if;
                 
@@ -399,10 +403,7 @@ begin
                 -- 读写数据状态
                 -- =============================================================
                 when SDRAM_READ_WRITE =>
-                    if n_ddr_sel = '1' or (gba_bus_wr_sync = '1' and gba_bus_rd_sync = '1') then
-                        next_state := SDRAM_PRECHARGE;
-                    -- 超时保护：满足tRAS时序后强制预充电
-                    elsif state_counter >= tRAS_CYCLES then
+                    if state_counter >= tRAS_CYCLES or n_ddr_sel = '1' then
                         next_state := SDRAM_PRECHARGE;
                     end if;
                 
@@ -410,10 +411,12 @@ begin
                 -- 预充电状态
                 -- =============================================================
                 when SDRAM_PRECHARGE =>
-                    if n_ddr_sel = '0' and (gba_bus_wr_sync = '0' or gba_bus_rd_sync = '0') then
-                        next_state := SDRAM_ACTIVATE;
-                    elsif state_counter >= tRP_CYCLES then
-                        next_state := SDRAM_IDLE;
+                    if state_counter >= tRP_CYCLES then
+                        if n_ddr_sel = '0' then
+                            next_state := SDRAM_ACTIVATE;
+                        else
+                            next_state := SDRAM_IDLE;
+                        end if;
                     end if;
                 
                 when others =>
