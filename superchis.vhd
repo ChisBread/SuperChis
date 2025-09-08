@@ -372,7 +372,7 @@ begin
                     -- 检查是否有DDR访问请求
                     if n_ddr_sel = '0' then
                         next_state := SDRAM_ACTIVATE;
-                    elsif refresh_needed = '1' and n_ddr_sel = '1' then
+                    elsif refresh_needed = '1' then
                         next_state := SDRAM_REFRESH;
                     end if;
                 
@@ -456,6 +456,7 @@ begin
                     ddr_ba_reg <= (others => '0');
                 when SDRAM_INIT_AUTO_REFRESH =>
                     -- 执行自动刷新直到解锁
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '0';  -- AUTO REFRESH命令
                     ddr_cas_reg <= '0';
                     ddr_we_reg  <= '1';
@@ -463,6 +464,7 @@ begin
                     ddr_ba_reg <= (others => '0');
                 when SDRAM_INIT_MODE_REG_SET =>
                     -- 设置模式寄存器
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '0';  -- MODE REGISTER SET命令
                     ddr_cas_reg <= '0';
                     ddr_we_reg  <= '0';
@@ -471,6 +473,7 @@ begin
                     ddr_ba_reg <= (others => '0');
                 when SDRAM_REFRESH =>
                     -- 发送AUTO REFRESH命令 (RAS=0, CAS=0, WE=1)
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '0';
                     ddr_cas_reg <= '0';
                     ddr_we_reg <= '1';
@@ -479,6 +482,7 @@ begin
                     
                 when SDRAM_ACTIVATE =>
                     -- 发送ACTIVATE命令 (RAS=0, CAS=1, WE=1)
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '0';
                     ddr_cas_reg <= '1';
                     ddr_we_reg <= '1';
@@ -490,6 +494,7 @@ begin
                     
                 when SDRAM_READ_WRITE =>
                     -- 发送READ/WRITE命令 (RAS=1, CAS=0, WE=读1写0)
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '1';
                     ddr_cas_reg <= '0';
                     -- 写保护：只有config_write_enable=1时才允许写入
@@ -502,6 +507,7 @@ begin
                     
                 when SDRAM_PRECHARGE =>
                     -- 发送PRECHARGE命令 (RAS=0, CAS=1, WE=0)
+                    ddr_cke_reg <= '1';  -- 使能时钟
                     ddr_ras_reg <= '0';
                     ddr_cas_reg <= '1';
                     ddr_we_reg <= '0';
@@ -511,6 +517,7 @@ begin
                     
                 when others =>
                     -- 发送NOP命令 (RAS=1, CAS=1, WE=1)
+                    ddr_cke_reg <= '0';  -- 使能时钟
                     ddr_ras_reg <= '1';
                     ddr_cas_reg <= '1';
                     ddr_we_reg <= '1';
