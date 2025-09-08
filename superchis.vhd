@@ -333,7 +333,7 @@ begin
         variable next_state : sdram_state_t;
     begin
         if falling_edge(CLK50MHz) then
-            -- 刷新计数器：每512周期请求一次刷新 (约10.24us)
+            -- 刷新计数器
             refresh_counter <= refresh_counter + 1;
             if refresh_counter(8 downto 7) = "11" then
                 refresh_needed <= '1';
@@ -414,6 +414,8 @@ begin
                     if state_counter >= tRP_CYCLES then
                         if n_ddr_sel = '0' then
                             next_state := SDRAM_ACTIVATE;
+                        elsif refresh_needed = '1' then
+                            next_state := SDRAM_REFRESH;
                         else
                             next_state := SDRAM_IDLE;
                         end if;
