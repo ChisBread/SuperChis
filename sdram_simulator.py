@@ -236,63 +236,29 @@ class SDRAMSimulator:
         
         # 对于每个地址线，根据模式选择输出
         for i in range(13):
-            if i == 10:
-                # A[10]是特殊的触发器，单独处理
-                self._update_a10_toggle()
-            else:
-                # 其他地址线的常规逻辑
-                if ref_mode:
-                    # 刷新模式下保持当前值或使用特定模式
-                    if not pre_mode and not acc_enable:
-                        # 保持当前值
-                        pass
-                    else:
-                        # 根据刷新模式的具体逻辑
-                        self.A[i] = 0
-                elif not cmd_active and pre_mode and acc_enable:
-                    # 预充电模式 - 使用列地址
-                    if i < len(self.internal_address):
-                        self.A[i] = self.internal_address[i]
-                elif not cmd_active and not pre_mode and acc_enable:
-                    # 正常访问模式 - 使用行地址
-                    row_addr_map = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
-                    if i < len(row_addr_map) and row_addr_map[i] < len(self.internal_address):
-                        self.A[i] = self.internal_address[row_addr_map[i]]
+            # 其他地址线的常规逻辑
+            if ref_mode:
+                # 刷新模式下保持当前值或使用特定模式
+                if not pre_mode and not acc_enable:
+                    # 保持当前值
+                    pass
+                else:
+                    # 根据刷新模式的具体逻辑
+                    self.A[i] = 0
+            elif not cmd_active and pre_mode and acc_enable:
+                # 预充电模式 - 使用列地址
+                if i < len(self.internal_address):
+                    self.A[i] = self.internal_address[i]
+            elif not cmd_active and not pre_mode and acc_enable:
+                # 正常访问模式 - 使用行地址
+                row_addr_map = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+                if i < len(row_addr_map) and row_addr_map[i] < len(self.internal_address):
+                    self.A[i] = self.internal_address[row_addr_map[i]]
         
         # Bank地址
         if not ref_mode and not cmd_active and acc_enable:
             self.BA[0] = self.GP_AD[22] if len(self.GP_AD) > 22 else 0
             self.BA[1] = self.GP_AD[23] if len(self.GP_AD) > 23 else 0
-    
-    def _update_a10_toggle(self):
-        """更新A[10]触发器，基于equipment.txt的确切逻辑"""
-        # 从equipment.txt获取的A[10]触发逻辑：
-        # $SDRAM.A[10].T = (!GP.AD[19] & !sdram_refresh_mode & !sdram_cmd_active & !sdram_precharge_mode & sdram_access_enable
-        #         | sdram_refresh_mode & !$SDRAM.A[10] & !sdram_cmd_active & !sdram_precharge_mode & !sdram_access_enable
-        #         | sdram_refresh_mode & $SDRAM.A[10] & sdram_cmd_active & !sdram_precharge_mode & !sdram_access_enable
-        #     ) ^ (!sdram_refresh_mode & !$SDRAM.A[10] & !sdram_cmd_active & sdram_access_enable)
-        
-        gp_ad19 = self.GP_AD[19] if len(self.GP_AD) > 19 else 0
-        ref_mode = self.sdram_refresh_mode
-        cmd_active = self.sdram_cmd_active  
-        pre_mode = self.sdram_precharge_mode
-        acc_enable = self.sdram_access_enable
-        current_a10 = self.A[10]
-        
-        # 计算主表达式的三个条件
-        cond1 = (not gp_ad19 and not ref_mode and not cmd_active and not pre_mode and acc_enable)
-        cond2 = (ref_mode and not current_a10 and not cmd_active and not pre_mode and not acc_enable)
-        cond3 = (ref_mode and current_a10 and cmd_active and not pre_mode and not acc_enable)
-        
-        # 计算XOR项
-        xor_term = (not ref_mode and not current_a10 and not cmd_active and acc_enable)
-        
-        # 最终切换信号 = (cond1 | cond2 | cond3) XOR xor_term
-        toggle = (cond1 or cond2 or cond3) != xor_term
-        
-        # 如果需要切换，则翻转A[10]
-        if toggle:
-            self.A[10] = 1 - self.A[10]
     
     def _update_control_pins(self):
         """更新控制引脚 (在!CLK50Mhz正沿)"""
