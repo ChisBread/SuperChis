@@ -59,14 +59,14 @@ def run_sequence(simulator, name, signal_sequence, verbose = True):
 def make_read_sequence(times):
     return [
         ("拉低CS", False, True, True, 4)
-    ] + [("拉低NRD", False, False, True, 6), ("拉高NRD", False, True, True, 4)] * times \
+    ] + [("拉低NRD", False, False, True, 12), ("拉高NRD", False, True, True, 4)] * times \
     + [("拉高CS", True, True, True, 6)]
 
 
 def make_write_sequence(times):
     return [
         ("拉低CS", False, True, True, 4)
-    ] + [("拉低NWR", False, True, False, 6), ("拉高NWR", False, True, True, 4)] * times \
+    ] + [("拉低NWR", False, True, False, 12), ("拉高NWR", False, True, True, 4)] * times \
     + [("拉高CS", True, True, True, 6)]
 
 
@@ -142,4 +142,4 @@ def test_read_write_commands(times):
         print(f"  {cmd}命令数量: {count}")
 
 if __name__ == "__main__":
-    test_read_write_commands(8)
+    test_read_write_commands(999)
