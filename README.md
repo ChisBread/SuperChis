@@ -6,7 +6,7 @@ SuperChis is an open-source CPLD implementation project designed to understand t
 
 - 🔧 **Open Source**: Complete VHDL source code and hardware design files
 - 🎮 **GBA Compatible**: Compatibility with Game Boy Advance and NDS
-- 💾 **Multi-Storage Support**: DDR SDRAM, Flash memory, and SRAM support
+- 💾 **Multi-Storage Support**: SDRAM, Flash memory, and SRAM support
 - 💾 **SD Card Interface**: Integrated SD card interface for mass storage
 - 🛠️ **Configurable**: Flexible configuration options and memory mapping
 
